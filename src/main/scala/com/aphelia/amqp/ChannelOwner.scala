@@ -1,5 +1,6 @@
 package com.aphelia.amqp
 
+import collection.JavaConversions._
 import akka.util.duration._
 import com.rabbitmq.client.AMQP.BasicProperties
 import com.rabbitmq.client._
@@ -70,6 +71,18 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
     }
     case Event(Reject(deliveryTag, requeue), Connected(channel)) => {
       channel.basicReject(deliveryTag, requeue)
+      stay
+    }
+    case Event(DeclareExchange(exchange), Connected(channel)) => {
+      declareExchange(channel, exchange)
+      stay
+    }
+    case Event(DeclareQueue(queue), Connected(channel)) => {
+      declareQueue(channel, queue)
+      stay
+    }
+    case Event(QueueBind(queue, exchange, routing_key, args), Connected(channel)) => {
+      channel.queueBind(queue, exchange, routing_key, args)
       stay
     }
   }

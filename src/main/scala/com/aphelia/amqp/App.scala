@@ -2,20 +2,13 @@ package com.aphelia.amqp
 
 import akka.pattern.ask
 import akka.util.duration._
-import com.rabbitmq.client.{Channel, ConnectionFactory}
-import akka.actor.Props.apply
-import java.util.concurrent.{Executors, ExecutorService}
-import akka.dispatch.{ExecutionContext, Future, Await}
+import com.rabbitmq.client.ConnectionFactory
+import akka.dispatch.Await
 import com.aphelia.amqp.RpcClient.{Response, Request}
-import com.aphelia.amqp.ConnectionOwner.Create
-import akka.util.Duration
 import akka.actor._
 import akka.actor.FSM.{Transition, SubscribeTransitionCallBack}
 
 
-/**
- * @author ${user.name}
- */
 object App {
 
   /**

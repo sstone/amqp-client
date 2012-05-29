@@ -61,7 +61,13 @@ package object amqp {
    * a shared queue.
    */
   case class ChannelParameters(qos : Int)
-  
+
+  case class DeclareQueue(queue : QueueParameters)
+
+  case class DeclareExchange(exchange : ExchangeParameters)
+
+  case class QueueBind(queue : String, exchange : String, routing_key : String, args: Map[String, AnyRef] = Map.empty)
+
   case class Binding(exchange : ExchangeParameters, queue : QueueParameters, routingKey : String, autoack : Boolean)
   
   case class Delivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte])
