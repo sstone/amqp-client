@@ -15,10 +15,10 @@ It is based on the [Akka](http://akka.io/) 2.0 framework.
 ## RPC patterns
 
 Typical RPC with AMQP follows this pattern:
-1. client sets up a private, exclusive response queue
-2. client sends message and set their 'replyTo' property to the name of this response queue
-3. server processes the message and replies to its 'replyTo' queue by publishing the response
-to the default exchange using the queue name as routing key (all queues are bound to their name
+
+1.  client sets up a private, exclusive response queue
+2.  client sends message and set their 'replyTo' property to the name of this response queue
+3.  server processes the message and replies to its 'replyTo' queue by publishing the response to the default exchange using the queue name as routing key (all queues are bound to their name
 on the default exchange)
 
 Usually, you would set up RPC server which all use the same shared queue. The broker will load-balance messsages
