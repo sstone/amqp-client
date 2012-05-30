@@ -3,20 +3,18 @@ package com.aphelia.amqp
 import org.scalatest.matchers.ShouldMatchers
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
-import org.scalatest.{WordSpec, BeforeAndAfter, Spec}
-import akka.actor.ActorSystem._
+import org.scalatest.{WordSpec, BeforeAndAfter}
 import akka.pattern.ask
 import akka.testkit.{TestProbe, TestKit}
 import com.aphelia.amqp.ConnectionOwner.CreateChannel
 import com.rabbitmq.client.{Channel, ConnectionFactory}
 import akka.util.duration._
-import akka.actor.Props._
-import akka.actor.{Actor, Props, ActorSystem}
+import akka.actor.{Props, ActorSystem}
 import java.util.concurrent.Executors
 import akka.dispatch.Future
-import com.aphelia.amqp.RpcClient.Request._
 import akka.dispatch.{Await, ExecutionContext}
 import com.aphelia.amqp.RpcClient.{Request, Response}
+import com.aphelia.amqp.Amqp._
 
 @RunWith(classOf[JUnitRunner])
 class ChannelOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec with ShouldMatchers with BeforeAndAfter {
@@ -28,7 +26,7 @@ class ChannelOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec 
       checkConnection
       println("after")
       val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "conn")
-      Thread.sleep(100)
+      Thread.sleep(500)
       val probe = TestProbe()
       probe.send(conn, CreateChannel)
       probe.expectMsgClass(1 second, classOf[Channel])
@@ -40,13 +38,13 @@ class ChannelOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec 
     "receive messages sent by producers" in {
       checkConnection
       val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "conn")
-      Thread.sleep(100)
+      Thread.sleep(500)
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "", passive = false, exclusive = true)
       val probe = TestProbe()
       val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", true)), probe.ref)), 5000 millis)
       val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
-      Thread.sleep(100)
+      Thread.sleep(500)
       val message = "yo!".getBytes
       producer ! Publish(exchange.name, "my_key", message)
       probe.expectMsgClass(1 second, classOf[Delivery])

@@ -7,6 +7,7 @@ import akka.dispatch.Await
 import com.aphelia.amqp.RpcClient.{Response, Request}
 import akka.actor._
 import akka.actor.FSM.{Transition, SubscribeTransitionCallBack}
+import com.aphelia.amqp.Amqp._
 
 
 object App {

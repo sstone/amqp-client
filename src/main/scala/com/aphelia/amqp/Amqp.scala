@@ -1,10 +1,11 @@
-package com.aphelia
+package com.aphelia.amqp
 
 import collection.JavaConversions._
-import com.rabbitmq.client.{Envelope, Channel}
 import com.rabbitmq.client.AMQP.BasicProperties
+import com.rabbitmq.client.{Channel, Envelope}
 
-package object amqp {
+object Amqp {
+
   /**
    * queue parameters
    * @param name queue name. if empty, the broker will generate a random name, see Queue.DeclareOk
@@ -53,30 +54,32 @@ package object amqp {
       channel.exchangeDeclare(e.name, e.exchangeType, e.durable, e.autodelete, e.args)
   }
 
+
   /**
    * Channel parameters
    * @param qos "quality of service", or prefetch count. The number of non-acknowledged messages a channel can receive. If set
-   * to one then the consumer using this channel will not receive another message until it has acknowledged or rejected
-   * its current message. This feature is commonly used as a load-balancing strategy using multiple consumers and
-   * a shared queue.
+   *            to one then the consumer using this channel will not receive another message until it has acknowledged or rejected
+   *            its current message. This feature is commonly used as a load-balancing strategy using multiple consumers and
+   *            a shared queue.
    */
-  case class ChannelParameters(qos : Int)
+  case class ChannelParameters(qos: Int)
 
-  case class DeclareQueue(queue : QueueParameters)
+  case class DeclareQueue(queue: QueueParameters)
 
-  case class DeclareExchange(exchange : ExchangeParameters)
+  case class DeclareExchange(exchange: ExchangeParameters)
 
-  case class QueueBind(queue : String, exchange : String, routing_key : String, args: Map[String, AnyRef] = Map.empty)
+  case class QueueBind(queue: String, exchange: String, routing_key: String, args: Map[String, AnyRef] = Map.empty)
 
-  case class Binding(exchange : ExchangeParameters, queue : QueueParameters, routingKey : String, autoack : Boolean)
-  
+  case class Binding(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, autoack: Boolean)
+
   case class Delivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte])
 
-  case class Publish(exchange: String, key: String, buffer: Array[Byte], mandatory : Boolean = true, immediate : Boolean = false)
-  
-  case class Ack(deliveryTag : Long)
-  
-  case class Reject(deliveryTag : Long, requeue : Boolean = true)
+  case class Publish(exchange: String, key: String, buffer: Array[Byte], mandatory: Boolean = true, immediate: Boolean = false)
 
-  case class Transaction(publish : List[Publish])
+  case class Ack(deliveryTag: Long)
+
+  case class Reject(deliveryTag: Long, requeue: Boolean = true)
+
+  case class Transaction(publish: List[Publish])
+
 }

@@ -8,6 +8,7 @@ import com.aphelia.amqp.ChannelOwner.{Data, State}
 import akka.actor.{ActorRef, Actor, FSM}
 import com.aphelia.amqp.ConnectionOwner.{CreateChannel, Shutdown}
 import collection.mutable
+import com.aphelia.amqp.Amqp._
 
 object ChannelOwner {
 
@@ -45,6 +46,7 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
       channelParams.foreach(p => channel.basicQos(p.qos))
       channel.addReturnListener(new ReturnListener() {
         def handleReturn(replyCode: Int, replyText: String, exchange: String, routingKey: String, properties: BasicProperties, body: Array[Byte]) {
+          log.warning("returned message code=%d text=%s exchange=%s routing_key=%s".format(replyCode, replyText, exchange, routingKey))
           self !('returned, replyCode, replyText, exchange, routingKey, properties, body)
         }
       })
@@ -66,10 +68,12 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
       stay
     }
     case Event(Ack(deliveryTag), Connected(channel)) => {
+      log.debug("acking %d on %s".format(deliveryTag, channel))
       channel.basicAck(deliveryTag, false)
       stay
     }
     case Event(Reject(deliveryTag, requeue), Connected(channel)) => {
+      log.debug("rejecting %d on %s".format(deliveryTag, channel))
       channel.basicReject(deliveryTag, requeue)
       stay
     }
