@@ -59,14 +59,14 @@ class ChannelOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec 
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "my_queue", passive = false)
       val proc = new RpcServer.IProcessor() {
-        def process(input: Array[Byte]) = {
+        def process(delivery : Delivery) = {
           println("processing")
-          val s = new String(input)
+          val s = new String(delivery.body)
           if (s == "5") throw new Exception("I dont do 5s")
-          input
+          Some(delivery.body)
         }
 
-        def onFailure(e: Exception) = e.toString.getBytes
+        def onFailure(delivery : Delivery, e : Exception) = Some(e.toString.getBytes)
       }
       val server = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "my_key", proc)), 2000 millis)
       val client1 = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000 millis)

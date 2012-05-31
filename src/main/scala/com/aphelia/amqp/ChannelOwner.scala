@@ -54,7 +54,7 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
       goto(Connected) using Connected(channel)
     }
   }
-  
+
   when(Connected) {
     case Event(Shutdown(cause), _) => goto(Disconnected)
     case Event(Publish(exchange, routingKey, body, mandatory, immediate), Connected(channel)) => {
@@ -120,10 +120,10 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
   }
 }
 
-class Consumer(bindings : List[Binding], listener: ActorRef, channelParams : Option[ChannelParameters] = None) extends ChannelOwner(channelParams) {
-  var consumer : Option[DefaultConsumer] = None
-  
-  private def setupBinding(consumer : DefaultConsumer, binding : Binding) = {
+class Consumer(bindings: List[Binding], listener: ActorRef, channelParams: Option[ChannelParameters] = None) extends ChannelOwner(channelParams) {
+  var consumer: Option[DefaultConsumer] = None
+
+  private def setupBinding(consumer: DefaultConsumer, binding: Binding) = {
     val channel = consumer.getChannel
     val queueName = declareQueue(channel, binding.queue).getQueue
     declareExchange(channel, binding.exchange)
@@ -144,15 +144,17 @@ class Consumer(bindings : List[Binding], listener: ActorRef, channelParams : Opt
 object RpcServer {
 
   trait IProcessor {
-    def process(data: Array[Byte]): Array[Byte]
+    def process(delivery: Delivery): Option[Array[Byte]]
 
-    def onFailure(e: Exception): Array[Byte]
+    def onFailure(delivery: Delivery, e: Exception): Option[Array[Byte]]
   }
+
 }
 
 class RpcServer(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None) extends ChannelOwner(channelParams) {
-  var consumer : Option[DefaultConsumer] = None
-  override def onChannel(channel: Channel) = {   
+  var consumer: Option[DefaultConsumer] = None
+
+  override def onChannel(channel: Channel) = {
     val queueName = declareQueue(channel, queue).getQueue
     declareExchange(channel, exchange)
     channel.queueBind(queueName, exchange.name, routingKey)
@@ -165,13 +167,16 @@ class RpcServer(queue: QueueParameters, exchange: ExchangeParameters, routingKey
   }
 
   when(ChannelOwner.Connected) {
-    case Event(Delivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]), ChannelOwner.Connected(channel)) => {
+    case Event(delivery@Delivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]), ChannelOwner.Connected(channel)) => {
       log.debug("processing delivery")
       try {
-        val result = processor.process(body)
-        if (properties.getReplyTo != null) {
-          val props = new BasicProperties.Builder().correlationId(properties.getCorrelationId).build()
-          channel.basicPublish("", properties.getReplyTo, true, false, props, result)
+        processor.process(delivery) match {
+          case Some(data) => {
+            if (properties.getReplyTo != null) {
+              val props = new BasicProperties.Builder().correlationId(properties.getCorrelationId).build()
+              channel.basicPublish("", properties.getReplyTo, true, false, props, data)
+            }
+          }
         }
         channel.basicAck(envelope.getDeliveryTag, false)
       }
@@ -179,12 +184,17 @@ class RpcServer(queue: QueueParameters, exchange: ExchangeParameters, routingKey
         case e: Exception => {
           // if a request could not be processed twice, send back an error
           if (envelope.isRedeliver) {
-            if (properties.getReplyTo != null) {
-              val props = new BasicProperties.Builder().correlationId(properties.getCorrelationId).build()
-              channel.basicPublish("", properties.getReplyTo, true, false, props, processor.onFailure(e))
+            processor.onFailure(delivery, e) match {
+              case Some(data) => {
+                if (properties.getReplyTo != null) {
+                  val props = new BasicProperties.Builder().correlationId(properties.getCorrelationId).build()
+                  channel.basicPublish("", properties.getReplyTo, true, false, props, data)
+                }
+                channel.basicAck(envelope.getDeliveryTag, false)
+              }
+              case None => channel.basicReject(envelope.getDeliveryTag, true)
             }
-            channel.basicAck(envelope.getDeliveryTag, false)
-          }
+           }
           // else requeue the message, it will be picked up by another consumer
           else {
             log.error("processing failed twice, returning error buffer")
@@ -208,7 +218,9 @@ object RpcClient {
 }
 
 class RpcClient(channelParams: Option[ChannelParameters] = None) extends ChannelOwner(channelParams) {
+
   import RpcClient._
+
   var queue: String = ""
   var consumer: Option[DefaultConsumer] = None
   var counter: Int = 0

@@ -93,12 +93,11 @@ object App {
   def testMultipleResponses(conn : ActorRef) {
     // basic processor
     val proc = new RpcServer.IProcessor() {
-      def process(input: Array[Byte]) = {
+      def process(delivery : Delivery) = {
         println("processing")
-        input
+        Some(delivery.body)
       }
-
-      def onFailure(e: Exception) = e.toString.getBytes
+      def onFailure(delivery : Delivery, e: Exception) = Some(e.toString.getBytes)
     }
     // amq.direct is one of the standard AMQP exchanges
     val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
@@ -158,11 +157,11 @@ object App {
 
     if (serverMode) {
       val proc = new RpcServer.IProcessor() {
-        def process(input: Array[Byte]) = {
-          println("processing" + new String(input))
-          input
+        def process(delivery : Delivery) = {
+          println("processing" + delivery)
+          Some(delivery.body)
         } // just return the input
-        def onFailure(e: Exception) = null
+        def onFailure(delivery : Delivery, e: Exception) = None
       }
       val server = ConnectionOwner.createActor(conn,
         Props(new RpcServer(
