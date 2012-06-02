@@ -171,34 +171,36 @@ class RpcServer(queue: QueueParameters, exchange: ExchangeParameters, routingKey
       log.debug("processing delivery")
       try {
         processor.process(delivery) match {
-          case Some(data) => {
-            if (properties.getReplyTo != null) {
-              val props = new BasicProperties.Builder().correlationId(properties.getCorrelationId).build()
-              channel.basicPublish("", properties.getReplyTo, true, false, props, data)
-            }
+          // send a reply only if processor return something *and* replyTo is set
+          case Some(data) if (properties.getReplyTo != null) => {
+            val props = new BasicProperties.Builder().correlationId(properties.getCorrelationId).build()
+            channel.basicPublish("", properties.getReplyTo, true, false, props, data)
           }
+          case _ => {}
         }
         channel.basicAck(envelope.getDeliveryTag, false)
       }
       catch {
         case e: Exception => {
-          // if a request could not be processed twice, send back an error
-          if (envelope.isRedeliver) {
-            processor.onFailure(delivery, e) match {
-              case Some(data) => {
-                if (properties.getReplyTo != null) {
+          // check re-delivered tag
+          envelope.isRedeliver match {
+            // first failure: reject the message
+            case false => {
+              log.error(e, "processing {} failed, rejecting message", delivery)
+              channel.basicReject(envelope.getDeliveryTag, true)
+            }
+            // second failure: reply with an error message, ack the message
+            case true => {
+              log.error(e, "processing {} failed for the second time, acking message", delivery)
+              processor.onFailure(delivery, e) match {
+                case Some(data) if (properties.getReplyTo != null) => {
                   val props = new BasicProperties.Builder().correlationId(properties.getCorrelationId).build()
                   channel.basicPublish("", properties.getReplyTo, true, false, props, data)
                 }
-                channel.basicAck(envelope.getDeliveryTag, false)
+                case _ => {}
               }
-              case None => channel.basicReject(envelope.getDeliveryTag, true)
+              channel.basicAck(envelope.getDeliveryTag, false)
             }
-           }
-          // else requeue the message, it will be picked up by another consumer
-          else {
-            log.error("processing failed twice, returning error buffer")
-            channel.basicReject(envelope.getDeliveryTag, true)
           }
         }
       }

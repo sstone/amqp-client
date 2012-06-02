@@ -22,9 +22,7 @@ class ChannelOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec 
 
   "ChannelOwner" should {
     "provide channels" in {
-      println("before")
       checkConnection
-      println("after")
       val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "conn")
       Thread.sleep(500)
       val probe = TestProbe()

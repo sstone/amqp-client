@@ -62,7 +62,7 @@ object ConnectionOwner {
  * @param connFactory connection factory
  * @param reconnectionDelay delay between reconnection attempts
  */
-class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: Duration = 2000 millis) extends Actor with FSM[State, Data] {
+class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: Duration = 10000 millis) extends Actor with FSM[State, Data] {
 
   startWith(Disconnected, Uninitialized)
 
