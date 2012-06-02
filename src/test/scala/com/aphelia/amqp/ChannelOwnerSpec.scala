@@ -15,6 +15,7 @@ import akka.dispatch.Future
 import akka.dispatch.{Await, ExecutionContext}
 import com.aphelia.amqp.RpcClient.{Request, Response}
 import com.aphelia.amqp.Amqp._
+import com.aphelia.amqp.RpcServer.IProcessor
 
 @RunWith(classOf[JUnitRunner])
 class ChannelOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec with ShouldMatchers with BeforeAndAfter {
@@ -103,6 +104,40 @@ class ChannelOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec 
     }
   }
 
+  "RPC Clients and Servers" should {
+    "implement 1 request/several responses patterns" in {
+      checkConnection
+      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "conn")
+      Thread.sleep(500)
+      val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
+      // empty means that a random name will be generated when the queue is declared
+      val queue = QueueParameters(name = "", passive = false, exclusive = true)
+      // create 2 servers, each using a broker generated private queue and their own processor
+      val proc1 = new IProcessor {
+        def process(delivery: Delivery) = Some("proc1".getBytes)
+
+        def onFailure(delivery: Delivery, e: Exception) = None
+      }
+      val server1 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "mykey", proc1)), 2000 millis )
+      val proc2 = new IProcessor {
+        def process(delivery: Delivery) = Some("proc2".getBytes)
+
+        def onFailure(delivery: Delivery, e: Exception) = None
+      }
+      val server2 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "mykey", proc2)), 2000 millis )
+
+      val client = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000 millis)
+      Thread.sleep(500)
+      val future = client.ask(Request(Publish(exchange.name, "mykey", "yo!".getBytes) :: Nil, 2))(1000 millis)
+      val result = Await.result(future, 1000 millis).asInstanceOf[Response]
+      assert(result.buffers.length == 2)
+      // we're supposed to have received to answers, "proc1" and "proc2"
+      val strings = result.buffers.map(new String(_))
+      assert(strings.sorted == List("proc1", "proc2"))
+
+      system.stop(conn)
+    }
+  }
   def checkConnection {
     try {
       val conn = connFactory.newConnection()

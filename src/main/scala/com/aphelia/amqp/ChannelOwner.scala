@@ -26,6 +26,11 @@ object ChannelOwner {
 
 }
 
+/**
+ * Channel owners are created by connection owners and hold an AMQP channel which is used to do
+ * bascically everyhting: create queues and bindings, publish messages, consume messages...
+ * @param channelParams
+ */
 class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Actor with FSM[State, Data] {
 
   import ChannelOwner._

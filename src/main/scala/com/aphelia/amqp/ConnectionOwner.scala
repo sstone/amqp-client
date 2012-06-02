@@ -59,6 +59,15 @@ object ConnectionOwner {
 
 /**
  * ConnectionOwner class, which holds an AMQP connection and handles re-connection
+ * It is implemented as a state machine which 2 possible states
+ * <ul>
+ * <li>Disconnected, and it will try to connect to the broker at regular intervals</li>
+ * <li>Connected; it is then holding a connection
+ * </ul>
+ * Connection owner is responsible for creating "channel aware" actor (channel are like virtual connections,
+ * which are multiplexed on the underlying connection). The parent connection owner will automatically tell
+ * its children when the connection is lost, and send them new channels when it comes back on.
+ * YMMV, but it is a good practice to have few connections and several channels per connection
  * @param connFactory connection factory
  * @param reconnectionDelay delay between reconnection attempts
  */
@@ -96,8 +105,7 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: Duratio
         case e: IOException => setTimer("reconnect", 'connect, reconnectionDelay, true)
       }
     }
-
-    /**
+    /*
      * create a "channel aware" actor that will request channels from this connection actor
      */
     case Event(Create(props, name), _) => {
@@ -116,8 +124,7 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: Duratio
      * channel request. send back a channel
      */
     case Event(CreateChannel, Connected(conn)) => stay replying conn.createChannel()
-
-    /**
+    /*
      * create a "channel aware" actor that will request channels from this connection actor
      */
     case Event(Create(props, name), Connected(conn)) => {
