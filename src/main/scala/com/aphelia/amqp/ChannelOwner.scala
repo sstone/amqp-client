@@ -31,31 +31,43 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
   import ChannelOwner._
 
   startWith(Disconnected, Uninitialized)
-  setTimer("getChannel", 'getChannel, 1000 millis, true)
 
-  def isConnected = stateName == Connected
-
+  /**
+   * additional setup step that gets called each when this actor receives a channel
+   * from its ConnectionOwner parent.
+   * override this to implement custom steps
+   * @param channel AMQP channel sent by the actor's parent
+   */
   def onChannel(channel: Channel) {}
 
+  def setup(channel: Channel) {
+    channelParams.foreach(p => channel.basicQos(p.qos))
+    channel.addReturnListener(new ReturnListener() {
+      def handleReturn(replyCode: Int, replyText: String, exchange: String, routingKey: String, properties: BasicProperties, body: Array[Byte]) {
+        log.warning("returned message code=%d text=%s exchange=%s routing_key=%s".format(replyCode, replyText, exchange, routingKey))
+        self !('returned, replyCode, replyText, exchange, routingKey, properties, body)
+      }
+    })
+    onChannel(channel)
+  }
+
   when(Disconnected) {
-    case Event('getChannel, _) => {
-      context.parent ! CreateChannel
-      stay
-    }
     case Event(channel: Channel, _) => {
-      channelParams.foreach(p => channel.basicQos(p.qos))
-      channel.addReturnListener(new ReturnListener() {
-        def handleReturn(replyCode: Int, replyText: String, exchange: String, routingKey: String, properties: BasicProperties, body: Array[Byte]) {
-          log.warning("returned message code=%d text=%s exchange=%s routing_key=%s".format(replyCode, replyText, exchange, routingKey))
-          self !('returned, replyCode, replyText, exchange, routingKey, properties, body)
-        }
-      })
-      onChannel(channel)
+      setup(channel)
       goto(Connected) using Connected(channel)
     }
   }
 
   when(Connected) {
+    case Event(channel: Channel, _) => {
+      // we already have a channel, close this one to prevent resource leaks
+      log.warning("closing unexpected channel {}", channel)
+      channel.close()
+      stay
+    }
+    /*
+     * sent by the actor's parent when the AMQP connection is lost
+     */
     case Event(Shutdown(cause), _) => goto(Disconnected)
     case Event(Publish(exchange, routingKey, body, mandatory, immediate), Connected(channel)) => {
       channel.basicPublish(exchange, routingKey, mandatory, immediate, new AMQP.BasicProperties.Builder().build(), body)
@@ -94,17 +106,14 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
   onTransition {
     case Disconnected -> Connected => {
       log.info("connected")
-      cancelTimer("getChannel")
     }
     case Connected -> Disconnected => {
       log.warning("disconnect")
-      setTimer("getChannel", 'getChannel, 1000 millis, true)
     }
   }
 
   onTermination {
     case StopEvent(_, Connected, Connected(channel)) => {
-      cancelTimer("getChannel")
       try {
         log.info("closing channel")
         channel.close()
@@ -113,10 +122,6 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
         case e: Exception => log.warning(e.toString)
       }
     }
-  }
-
-  override def preStart() {
-    self ! 'getChannel
   }
 }
 

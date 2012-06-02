@@ -26,9 +26,9 @@ object ConnectionOwner {
 
   private[amqp] case class CreateChannel()
 
-  private[amqp] case class Shutdown(cause : ShutdownSignalException)
- 
-  case class Create(props : Props,  name : Option[String] = None)
+  private[amqp] case class Shutdown(cause: ShutdownSignalException)
+
+  case class Create(props: Props, name: Option[String] = None)
 
   /**
    * ask a connection actor to create a channel actor
@@ -37,7 +37,7 @@ object ConnectionOwner {
    * @param timeout time-out
    * @return a "channel aware" actor
    */
-  def createActor(conn : ActorRef, props : Props, timeout : Duration = 1000 millis) = {
+  def createActor(conn: ActorRef, props: Props, timeout: Duration = 5000 millis) = {
     val future = conn.ask(Create(props))(timeout)
     Await.result(future, timeout).asInstanceOf[ActorRef]
   }
@@ -45,9 +45,9 @@ object ConnectionOwner {
   /**
    * creates an amqp uri from a ConnectionFactory. From the specs:
    * <ul>
-   *  <li>amqp_URI       = "amqp://" amqp_authority [ "/" vhost ]</li>
-   *  <li>amqp_authority = [ amqp_userinfo "@" ] host [ ":" port ]</li>
-   *  <li>amqp_userinfo  = username [ ":" password ]</li>
+   * <li>amqp_URI       = "amqp://" amqp_authority [ "/" vhost ]</li>
+   * <li>amqp_authority = [ amqp_userinfo "@" ] host [ ":" port ]</li>
+   * <li>amqp_userinfo  = username [ ":" password ]</li>
    * </ul>
    * @param cf connection factory
    * @return an amqp uri
@@ -66,6 +66,20 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: Duratio
 
   startWith(Disconnected, Uninitialized)
 
+  /**
+   * ask this connection owner to create a "channel aware" child
+   * @param props actor creation properties
+   * @param name optional actor name
+   * @return a new actor
+   */
+  def createChild(props: Props, name: Option[String]) = {
+    // why isn't there an actorOf(props: Props, name: Option[String] = None) ?
+    name match {
+      case None => context.actorOf(props)
+      case Some(actorName) => context.actorOf(props, actorName)
+    }
+  }
+
   when(Disconnected) {
     case Event('connect, _) => {
       try {
@@ -82,13 +96,41 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: Duratio
         case e: IOException => setTimer("reconnect", 'connect, reconnectionDelay, true)
       }
     }
-    // when disconnected, ignore channel request. Another option would to send back something like None...
+
+    /**
+     * create a "channel aware" actor that will request channels from this connection actor
+     */
+    case Event(Create(props, name), _) => {
+      val child = createChild(props, name)
+      log.debug("creating child {} while in disconnected state", child)
+      stay replying child
+    }
+    /*
+     * when disconnected, ignore channel request. Another option would to send back something like None...
+     */
     case Event(CreateChannel, _) => stay
   }
+
   when(Connected) {
-    // channel request. send back a channel
+    /*
+     * channel request. send back a channel
+     */
     case Event(CreateChannel, Connected(conn)) => stay replying conn.createChannel()
-    // shutdown event sent by the channel's shutdown listener
+
+    /**
+     * create a "channel aware" actor that will request channels from this connection actor
+     */
+    case Event(Create(props, name), Connected(conn)) => {
+      val channel = conn.createChannel()
+      val child = createChild(props, name)
+      log.debug("creating child {} with channel {}", child, channel)
+      // send a channel to the kid
+      child ! channel
+      stay replying child
+    }
+    /*
+     * shutdown event sent by the connection's shutdown listener
+     */
     case Event(Shutdown(cause), _) => {
       if (!cause.isInitiatedByApplication) {
         log.error(cause.toString)
@@ -97,26 +139,20 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: Duratio
       }
       goto(Disconnected) using (Uninitialized)
     }
-  }
-  whenUnhandled {
-    /**
-     * create a "channel aware" actor that will request channels from this connection actor
+    /*
+     * send a channel to each child actor
      */
-    case Event(Create(props, name), _) => {
-      // why isn't there an actorOf(props: Props, name: Option[String] = None) ?
-      name match {
-        case None => stay replying context.actorOf(props)
-        case Some(actorName) => stay replying context.actorOf(props, actorName)
-      }
-    }
-    case Event(msg, _) => {
-      log.warning("unknown event " + msg)
+    case Event('feedTheKids, Connected(conn)) => {
+      context.children.foreach(_ ! conn.createChannel())
       stay
     }
   }
 
   onTransition {
-    case Disconnected -> Connected => log.info("connected to " + toUri(connFactory))
+    case Disconnected -> Connected => {
+      log.info("connected to " + toUri(connFactory))
+      self ! 'feedTheKids
+    }
     case Connected -> Disconnected => log.warning("lost connection to " + toUri(connFactory))
   }
 
