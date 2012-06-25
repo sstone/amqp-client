@@ -8,6 +8,7 @@ import com.aphelia.amqp.RpcClient.{Response, Request}
 import akka.actor._
 import akka.actor.FSM.{Transition, SubscribeTransitionCallBack}
 import com.aphelia.amqp.Amqp._
+import java.util.concurrent.CountDownLatch
 
 
 object App {
@@ -48,13 +49,12 @@ object App {
         }
       }
     }))
-    var consumerReady = false
-    var producerReady = false
+    val latch = new CountDownLatch(2)
     val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", autoack = false)), foo)), 5000 millis)
-    setMonitor(system, consumer, () => consumerReady = true)
+    setMonitor(system, consumer, () => latch.countDown())
     val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
-    setMonitor(system, producer, () => producerReady = true)
-    while(!producerReady && !consumerReady) Thread.sleep(200)
+    setMonitor(system, producer, () => latch.countDown())
+    latch.await()
     producer ! Publish("amq.direct", "my_key", "yo!".getBytes)
     consumer ! PoisonPill
     producer ! PoisonPill
