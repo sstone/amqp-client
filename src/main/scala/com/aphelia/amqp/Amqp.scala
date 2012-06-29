@@ -3,6 +3,9 @@ package com.aphelia.amqp
 import collection.JavaConversions._
 import com.rabbitmq.client.AMQP.BasicProperties
 import com.rabbitmq.client.{Channel, Envelope}
+import akka.actor.{Actor, Props, ActorRef, ActorSystem}
+import akka.actor.FSM.{SubscribeTransitionCallBack, CurrentState, Transition}
+import java.util.concurrent.CountDownLatch
 
 object Amqp {
 
@@ -82,4 +85,41 @@ object Amqp {
 
   case class Transaction(publish: List[Publish])
 
+  /** executes a callback when a connection or channel actors is "connected" i.e. usable
+   * <ul>
+   *   <li>for a connection actor, connected means that it is connected to the AMQP broker</li>
+   *   <li>for a channel actor, connected means that it is has a valid channel (sent by its connection parent)</li>
+   * </ul>
+   * this is a simple wrapper around the FSM state monitoring tools provided by Akka, since ConnectionOwner and ChannelOwner
+   * are state machines with 2 states (Disconnected and Connected)
+   * @param system actor system (will be used to create a temporary watcher)
+   * @param channelOrConnectionActor reference to a ConnectionOwner or ChannelOwner actor
+   * @param onConnected connection callback
+   */
+  def onConnection(system: ActorSystem, channelOrConnectionActor: ActorRef, onConnected: () => Unit) = {
+    val m = system.actorOf(Props(new Actor {
+      def receive = {
+        case Transition(_, ChannelOwner.Disconnected, ChannelOwner.Connected)
+             | Transition(_, ConnectionOwner.Disconnected, ConnectionOwner.Connected)
+             | CurrentState(_, ConnectionOwner.Connected)
+             | CurrentState(_, ChannelOwner.Connected) => {
+          onConnected()
+          context.stop(self)
+        }
+      }
+    }))
+    channelOrConnectionActor ! SubscribeTransitionCallBack(m)
+  }
+
+  /** wait until a number of connection or channel actors are connected
+   *
+   * @param system actor system (will be used to create temporary watchers)
+   * @param actors set of reference to ConnectionOwner or ChannelOwner actors
+   * @return a CountDownLatch object you can wait on; its count will reach 0 when all actors are connected
+   */
+  def waitForConnection(system: ActorSystem, actors: ActorRef*): CountDownLatch = {
+    val latch = new CountDownLatch(actors.size)
+    actors.foreach(onConnection(system, _, () => latch.countDown()))
+    latch
+  }
 }

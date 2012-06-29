@@ -13,117 +13,109 @@ import java.util.concurrent.CountDownLatch
 
 object App {
 
-  /**
-   * Since ChannelOwner are FSM with "Connected" and "Disconnected" states, it is fairly
-   * easy to monitor state transitions. In this case we just want to knwo when
-   * a channel owner is "connected" i.e owns a valid channel
-   * @param channelActor channel actor
-   * @param onConnected connection callback, called when the actor transitions from "disconnected"
-   * to "connected"
-   */
-  def setMonitor(system : ActorSystem, channelActor : ActorRef,  onConnected: () => Unit) = {
-    val m = system.actorOf(Props(new Actor {
-      def receive = {
-        case Transition(_, ChannelOwner.Disconnected, ChannelOwner.Connected) => {
-          onConnected()
-          context.stop(self)
+    /**
+     * basic consumer/producer test
+     */
+    def testConsumer() {
+      val system = ActorSystem("MySystem")
+      val connFactory = new ConnectionFactory()
+      connFactory.setHost("localhost")
+      // create a "connection owner" actor, which will try and reconnect automatically if the connection ins lost
+      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "conn")
+      // use the standard direct exchange
+      val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
+      // and an exclusive, private queue (name = "" means that the broker will generate a random name)
+      val queue = QueueParameters(name = "", passive = false, exclusive = true)
+
+      val foo = system.actorOf(Props(new Actor {
+        def receive = {
+          case Delivery(tag, envelope, properties, body) => {
+            println("got a message")
+            sender ! Ack(envelope.getDeliveryTag)
+          }
+        }
+      }))
+      // create a consumer that will pass all messages to the foo Actor; the consumer will declare the bindings
+      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", autoack = false)), foo)), 5000 millis)
+      val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
+      waitForConnection(system, consumer, producer)
+      producer ! Publish("amq.direct", "my_key", "yo!".getBytes)
+      consumer ! PoisonPill
+      producer ! PoisonPill
+      system.shutdown()
+    }
+
+    /**
+     * basic transaction test
+     */
+    def testTransactions() {
+      val system = ActorSystem("MySystem")
+      val connFactory = new ConnectionFactory()
+      connFactory.setHost("localhost")
+      // create a "connection owner" actor, which will try and reconnect automatically if the connection ins lost
+      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "conn")
+      val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
+      val queue = QueueParameters(name = "queue", passive = false, exclusive = false)
+      val foo = system.actorOf(Props(new Actor {
+        def receive = {
+          case Delivery(tag, envelope, properties, body) => println("got a message")
+        }
+      }))
+      val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
+      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(Binding(exchange, queue, "my_key", true) :: Nil, foo)))
+      waitForConnection(system, producer, consumer)
+      for(i <- 0 to 10) producer ! Transaction(Publish("amq.direct", "my_key", "yo".getBytes, true, false) :: Nil)
+      consumer ! PoisonPill
+      producer ! PoisonPill
+      foo ! PoisonPill
+      system.shutdown()
+    }
+
+    /**
+     * RPC sample where each request is picked up by 2 different server and results in 2 responses
+     */
+    def testMultipleResponses() {
+      val system = ActorSystem("MySystem")
+      val connFactory = new ConnectionFactory()
+      connFactory.setHost("localhost")
+      // create a "connection owner" actor, which will try and reconnect automatically if the connection ins lost
+      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "conn")
+
+      // basic processor
+      val proc = new RpcServer.IProcessor() {
+        def process(delivery : Delivery) = {
+          println("processing")
+          Some(delivery.body)
+        }
+        def onFailure(delivery : Delivery, e: Exception) = Some(e.toString.getBytes)
+      }
+      // amq.direct is one of the standard AMQP exchanges
+      val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
+      // this is how you define an exclusive, private response queue. The name is empty
+      // which means that the broker will generate a unique, random name when the queue is declared
+      val queue = QueueParameters(name = "", passive = false, exclusive = true)
+      // create 2 servers, each with its own private queue bound to the same key
+      val server1 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "my_key", proc)), 2000 millis)
+      val server2 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "my_key", proc)), 2000 millis)
+      val client = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000 millis)
+      waitForConnection(system, server1, server2, client)
+      for (i <-0 to 10) {
+        try {
+          // send one request and wait for 2 responses
+          val future = client.ask(Request(Publish("amq.direct", "my_key", "client1".getBytes) :: Nil, 2))(1000 millis)
+          val result = Await.result(future, 1000 millis).asInstanceOf[Response]
+          println("result : " + result)
+          Thread.sleep(100)
+        }
+        catch {
+          case e: Exception => println(e.toString)
         }
       }
-    }))
-    channelActor ! SubscribeTransitionCallBack(m)
-  }
-
-  /**
-   * basic consumer/producer test
-   * @param conn ConnectionOwner actor
-   */
-  def testConsumer(conn : ActorRef) {
-    val system = ActorSystem("MySystem")
-    val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
-    val queue = QueueParameters(name = "", passive = false, exclusive = true)
-    val foo = system.actorOf(Props(new Actor {
-      def receive = {
-        case Delivery(tag, envelope, properties, body) => {
-          println("got a message")
-          sender ! Ack(envelope.getDeliveryTag)
-        }
-      }
-    }))
-    val latch = new CountDownLatch(2)
-    val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", autoack = false)), foo)), 5000 millis)
-    setMonitor(system, consumer, () => latch.countDown())
-    val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
-    setMonitor(system, producer, () => latch.countDown())
-    latch.await()
-    producer ! Publish("amq.direct", "my_key", "yo!".getBytes)
-    consumer ! PoisonPill
-    producer ! PoisonPill
-  }
-
-  /**
-   * basic transaction test
-   * @param conn ConnectionOwner actor
-   */
-  def testTransactions(conn : ActorRef) {
-    val system = ActorSystem("MySystem")
-    val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
-    val queue = QueueParameters(name = "queue", passive = false, exclusive = false)
-    val foo = system.actorOf(Props(new Actor {
-      def receive = {
-        case Delivery(tag, envelope, properties, body) => println("got a message")
-      }
-    }))
-    var producerReady = false
-    var consumerReady = false
-    val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
-    val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(Binding(exchange, queue, "my_key", true) :: Nil, foo)))
-    setMonitor(system, producer, () => producerReady = true)
-    setMonitor(system, consumer, () => consumerReady = true)
-    while(!producerReady && !consumerReady) Thread.sleep(200)
-    for(i <- 0 to 10) producer ! Transaction(Publish("amq.direct", "my_key2", "yo".getBytes, true, false) :: Nil)
-    consumer ! PoisonPill
-    producer ! PoisonPill
-    foo ! PoisonPill
-  }
-
-  /**
-   * RPC sample where each request is picked up by 2 different server and results in 2 responses
-   * @param conn ConnectionOwner actor
-   */
-  def testMultipleResponses(conn : ActorRef) {
-    // basic processor
-    val proc = new RpcServer.IProcessor() {
-      def process(delivery : Delivery) = {
-        println("processing")
-        Some(delivery.body)
-      }
-      def onFailure(delivery : Delivery, e: Exception) = Some(e.toString.getBytes)
+      client ! PoisonPill
+      server1 ! PoisonPill
+      server2 ! PoisonPill
+      system.shutdown()
     }
-    // amq.direct is one of the standard AMQP exchanges
-    val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
-    // this is how you define an exclusive, private response queue. The name is empty
-    // which means that the broker will generate a unique, random name when the queue is declared
-    val queue = QueueParameters(name = "", passive = false, exclusive = true)
-    // create 2 servers, each with its own private queue bound to the same key
-    val server1 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "my_key", proc)), 2000 millis)
-    val server2 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "my_key", proc)), 2000 millis)
-    val client = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000 millis)
-    for (i <-0 to 10) {
-      try {
-        // send one request and wait for 2 responses
-        val future = client.ask(Request(Publish("amq.direct", "my_key", "client1".getBytes) :: Nil, 2))(1000 millis)
-        val result = Await.result(future, 1000 millis).asInstanceOf[Response]
-        println("result : " + result)
-        Thread.sleep(100)
-      }
-      catch {
-        case e: Exception => println(e.toString)
-      }
-    }
-    client ! PoisonPill
-    server1 ! PoisonPill
-    server2 ! PoisonPill
-  }
 
   def main(args: Array[String]) {
     var serverMode = false
@@ -151,9 +143,6 @@ object App {
     val connFactory = new ConnectionFactory()
     connFactory.setHost(host)
     val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "conn")
-    testConsumer(conn)
-    system.shutdown()
-    sys.exit()
 
     if (serverMode) {
       val proc = new RpcServer.IProcessor() {
@@ -177,7 +166,7 @@ object App {
     }
     else {
       val client = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000 millis)
-      Thread.sleep(100)
+      waitForConnection(system, client)
       val future = client.ask(Request(Publish(exchange, key, message.getBytes) :: Nil, numberOfResponse))(1000 millis)
       val result = Await.result(future, 1000 millis).asInstanceOf[Response]
       println("result " + result)

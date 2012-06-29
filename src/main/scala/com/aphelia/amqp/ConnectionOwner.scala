@@ -30,19 +30,14 @@ object ConnectionOwner {
 
   case class Create(props: Props, name: Option[String] = None)
 
-  /**
-   * ask a connection actor to create a channel actor
-   * @param conn ConnectionOwner actor
-   * @param props ActorRef configuration object
-   * @param timeout time-out
-   * @return a "channel aware" actor
-   */
-  def createActor(conn: ActorRef, props: Props, timeout: Duration = 5000 millis) = {
-    val future = conn.ask(Create(props))(timeout)
+  def createActor(conn: ActorRef, props: Props, name: Option[String] = None, timeout: Duration = 5000 millis) = {
+    val future = conn.ask(Create(props, name))(timeout)
     Await.result(future, timeout).asInstanceOf[ActorRef]
   }
 
-  /**
+  def createActor(conn: ActorRef, props: Props, timeout: Duration) : ActorRef = createActor(conn, props, None, timeout)
+
+    /**
    * creates an amqp uri from a ConnectionFactory. From the specs:
    * <ul>
    * <li>amqp_URI       = "amqp://" amqp_authority [ "/" vhost ]</li>

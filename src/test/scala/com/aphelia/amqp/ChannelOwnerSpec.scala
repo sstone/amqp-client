@@ -25,7 +25,7 @@ class ChannelOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec 
     "provide channels" in {
       checkConnection
       val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "conn")
-      Thread.sleep(500)
+      waitForConnection(system, conn).await()
       val probe = TestProbe()
       probe.send(conn, CreateChannel)
       probe.expectMsgClass(1 second, classOf[Channel])
@@ -37,13 +37,12 @@ class ChannelOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec 
     "receive messages sent by producers" in {
       checkConnection
       val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "conn")
-      Thread.sleep(500)
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "", passive = false, exclusive = true)
       val probe = TestProbe()
       val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", true)), probe.ref)), 5000 millis)
       val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
-      Thread.sleep(500)
+      waitForConnection(system, conn, consumer, producer).await()
       val message = "yo!".getBytes
       producer ! Publish(exchange.name, "my_key", message)
       probe.expectMsgClass(1 second, classOf[Delivery])
@@ -58,18 +57,19 @@ class ChannelOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec 
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "my_queue", passive = false)
       val proc = new RpcServer.IProcessor() {
-        def process(delivery : Delivery) = {
+        def process(delivery: Delivery) = {
           println("processing")
           val s = new String(delivery.body)
           if (s == "5") throw new Exception("I dont do 5s")
           Some(delivery.body)
         }
 
-        def onFailure(delivery : Delivery, e : Exception) = Some(e.toString.getBytes)
+        def onFailure(delivery: Delivery, e: Exception) = Some(e.toString.getBytes)
       }
       val server = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "my_key", proc)), 2000 millis)
       val client1 = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000 millis)
       val client2 = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000 millis)
+      waitForConnection(system, conn, server, client1, client2).await()
       val exec = ExecutionContext.fromExecutorService(Executors.newCachedThreadPool())
 
       val f1 = Future {
@@ -108,7 +108,6 @@ class ChannelOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec 
     "implement 1 request/several responses patterns" in {
       checkConnection
       val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "conn")
-      Thread.sleep(500)
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       // empty means that a random name will be generated when the queue is declared
       val queue = QueueParameters(name = "", passive = false, exclusive = true)
@@ -118,16 +117,16 @@ class ChannelOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec 
 
         def onFailure(delivery: Delivery, e: Exception) = None
       }
-      val server1 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "mykey", proc1)), 2000 millis )
+      val server1 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "mykey", proc1)), 2000 millis)
       val proc2 = new IProcessor {
         def process(delivery: Delivery) = Some("proc2".getBytes)
 
         def onFailure(delivery: Delivery, e: Exception) = None
       }
-      val server2 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "mykey", proc2)), 2000 millis )
+      val server2 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "mykey", proc2)), 2000 millis)
 
       val client = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000 millis)
-      Thread.sleep(500)
+      waitForConnection(system, conn, server1, server2, client)
       val future = client.ask(Request(Publish(exchange.name, "mykey", "yo!".getBytes) :: Nil, 2))(1000 millis)
       val result = Await.result(future, 1000 millis).asInstanceOf[Response]
       assert(result.buffers.length == 2)
@@ -138,13 +137,14 @@ class ChannelOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec 
       system.stop(conn)
     }
   }
+
   def checkConnection {
     try {
       val conn = connFactory.newConnection()
       conn.close()
     }
     catch {
-      case e : Exception => info("cannot connect to local amqp broker, tests will not be run"); pending
+      case e: Exception => info("cannot connect to local amqp broker, tests will not be run"); pending
     }
   }
 }
