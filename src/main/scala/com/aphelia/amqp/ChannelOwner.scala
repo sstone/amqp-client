@@ -9,6 +9,8 @@ import akka.actor.{ActorRef, Actor, FSM}
 import com.aphelia.amqp.ConnectionOwner.{CreateChannel, Shutdown}
 import collection.mutable
 import com.aphelia.amqp.Amqp._
+import akka.actor.Status.Failure
+import java.io.IOException
 
 object ChannelOwner {
 
@@ -24,6 +26,14 @@ object ChannelOwner {
 
   private[amqp] case class Connected(channel: com.rabbitmq.client.Channel) extends Data
 
+  def withChannel[T](channel : Channel)(f : Channel => T) = {
+    try {
+      f(channel)
+    }
+    catch {
+      case e : IOException => Amqp.Error(e)
+    }
+  }
 }
 
 /**
@@ -36,6 +46,17 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
   import ChannelOwner._
 
   startWith(Disconnected, Uninitialized)
+
+
+  override def preRestart(reason: Throwable, message: Option[Any]) {
+    log.warning("preRestart {} {}", reason, message)
+    super.preRestart(reason, message)
+  }
+
+  override def postRestart(reason: Throwable) {
+    log.warning("preRestart {} {}", reason)
+    super.postRestart(reason)
+  }
 
   /**
    * additional setup step that gets called each when this actor receives a channel
@@ -51,6 +72,14 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
       def handleReturn(replyCode: Int, replyText: String, exchange: String, routingKey: String, properties: BasicProperties, body: Array[Byte]) {
         log.warning("returned message code=%d text=%s exchange=%s routing_key=%s".format(replyCode, replyText, exchange, routingKey))
         self !('returned, replyCode, replyText, exchange, routingKey, properties, body)
+      }
+    })
+    channel.addShutdownListener(new ShutdownListener {
+      def shutdownCompleted(cause: ShutdownSignalException) {
+        if (!cause.isInitiatedByApplication) {
+          log.error(cause, "channel was shut down")
+          self ! Shutdown(cause)
+        }
       }
     })
     onChannel(channel)
@@ -95,16 +124,25 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
       stay
     }
     case Event(DeclareExchange(exchange), Connected(channel)) => {
-      declareExchange(channel, exchange)
-      stay
+      stay replying withChannel(channel)(c => declareExchange(c, exchange))
+    }
+    case Event(DeleteExchange(exchange, ifUnused), Connected(channel)) => {
+      stay replying withChannel(channel)(c => c.exchangeDelete(exchange, ifUnused))
     }
     case Event(DeclareQueue(queue), Connected(channel)) => {
-      declareQueue(channel, queue)
-      stay
+      stay replying withChannel(channel)(c => declareQueue(c, queue))
+    }
+    case Event(PurgeQueue(queue), Connected(channel)) => {
+      stay replying withChannel(channel)(c => c.queuePurge(queue))
+    }
+    case Event(DeleteQueue(queue, ifUnused, ifEmpty), Connected(channel)) => {
+      stay replying withChannel(channel)(c => c.queueDelete(queue, ifUnused, ifEmpty))
     }
     case Event(QueueBind(queue, exchange, routing_key, args), Connected(channel)) => {
-      channel.queueBind(queue, exchange, routing_key, args)
-      stay
+      stay replying withChannel(channel)(c => c.queueBind(queue, exchange, routing_key, args))
+    }
+    case Event(QueueUnbind(queue, exchange, routing_key, args), Connected(channel)) => {
+      stay replying withChannel(channel)(c => c.queueUnbind(queue, exchange, routing_key, args))
     }
   }
 

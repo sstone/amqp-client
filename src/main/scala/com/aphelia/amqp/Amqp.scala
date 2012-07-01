@@ -69,9 +69,17 @@ object Amqp {
 
   case class DeclareQueue(queue: QueueParameters)
 
+  case class DeleteQueue(name : String, ifUnused : Boolean = false, ifEmpty : Boolean = false)
+
+  case class PurgeQueue(name : String)
+
   case class DeclareExchange(exchange: ExchangeParameters)
 
+  case class DeleteExchange(name : String, ifUnused : Boolean = false)
+
   case class QueueBind(queue: String, exchange: String, routing_key: String, args: Map[String, AnyRef] = Map.empty)
+
+  case class QueueUnbind(queue: String, exchange: String, routing_key: String, args: Map[String, AnyRef] = Map.empty)
 
   case class Binding(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, autoack: Boolean)
 
@@ -84,6 +92,8 @@ object Amqp {
   case class Reject(deliveryTag: Long, requeue: Boolean = true)
 
   case class Transaction(publish: List[Publish])
+
+  case class Error(e: Throwable)
 
   /** executes a callback when a connection or channel actors is "connected" i.e. usable
    * <ul>
