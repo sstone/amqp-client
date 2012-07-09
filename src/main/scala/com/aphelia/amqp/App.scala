@@ -59,7 +59,7 @@ object App {
     // create a consumer that will pass all messages to the foo Actor; the consumer will declare the bindings
     val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", autoack = false)), foo)), 5000 millis)
     val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
-    waitForConnection(system, consumer, producer)
+    waitForConnection(system, consumer, producer).await()
     producer ! Publish("amq.direct", "my_key", "yo!".getBytes)
     consumer ! PoisonPill
     producer ! PoisonPill
@@ -84,7 +84,7 @@ object App {
     }))
     val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
     val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(Binding(exchange, queue, "my_key", true) :: Nil, foo)))
-    waitForConnection(system, producer, consumer)
+    waitForConnection(system, producer, consumer).await()
     for (i <- 0 to 10) producer ! Transaction(Publish("amq.direct", "my_key", "yo".getBytes, true, false) :: Nil)
     consumer ! PoisonPill
     producer ! PoisonPill
@@ -120,7 +120,7 @@ object App {
     val server1 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "my_key", proc)), 2000 millis)
     val server2 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "my_key", proc)), 2000 millis)
     val client = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000 millis)
-    waitForConnection(system, server1, server2, client)
+    waitForConnection(system, server1, server2, client).await()
     for (i <- 0 to 10) {
       try {
         // send one request and wait for 2 responses

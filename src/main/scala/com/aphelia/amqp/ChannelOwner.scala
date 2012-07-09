@@ -168,7 +168,10 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
   }
 }
 
-class Consumer(bindings: List[Binding], listener: ActorRef, channelParams: Option[ChannelParameters] = None) extends ChannelOwner(channelParams) {
+class Consumer(bindings: List[Binding], listener: Option[ActorRef], channelParams: Option[ChannelParameters] = None) extends ChannelOwner(channelParams) {
+  def this(bindings: List[Binding], listener: ActorRef, channelParams: Option[ChannelParameters]) = this(bindings, Some(listener), channelParams)
+  def this(bindings: List[Binding], listener: ActorRef) = this(bindings, Some(listener))
+
   var consumer: Option[DefaultConsumer] = None
 
   private def setupBinding(consumer: DefaultConsumer, binding: Binding) = {
@@ -180,9 +183,13 @@ class Consumer(bindings: List[Binding], listener: ActorRef, channelParams: Optio
   }
 
   override def onChannel(channel: Channel) = {
+    val destination = listener match {
+      case None => self
+      case Some(a) => a
+    }
     consumer = Some(new DefaultConsumer(channel) {
       override def handleDelivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]) {
-        listener ! Delivery(consumerTag, envelope, properties, body)
+        destination ! Delivery(consumerTag, envelope, properties, body)
       }
     })
     bindings.foreach(b => setupBinding(consumer.get, b))
@@ -199,20 +206,9 @@ object RpcServer {
 
 }
 
-class RpcServer(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None) extends ChannelOwner(channelParams) {
-  var consumer: Option[DefaultConsumer] = None
-
-  override def onChannel(channel: Channel) = {
-    val queueName = declareQueue(channel, queue).getQueue
-    declareExchange(channel, exchange)
-    channel.queueBind(queueName, exchange.name, routingKey)
-    consumer = Some(new DefaultConsumer(channel) {
-      override def handleDelivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]) {
-        self ! Delivery(consumerTag, envelope, properties, body)
-      }
-    })
-    channel.basicConsume(queueName, false, consumer.get)
-  }
+class RpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None) extends Consumer(bindings, None, channelParams) {
+  def this(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None)
+  = this(List(Binding(exchange, queue, routingKey, false)), processor, channelParams)
 
   when(ChannelOwner.Connected) {
     case Event(delivery@Delivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]), ChannelOwner.Connected(channel)) => {

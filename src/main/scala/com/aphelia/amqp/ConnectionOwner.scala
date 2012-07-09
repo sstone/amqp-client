@@ -106,7 +106,10 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: Duratio
         goto(Connected) using (Connected(conn))
       }
       catch {
-        case e: IOException => setTimer("reconnect", 'connect, reconnectionDelay, true)
+        case e: IOException => {
+          log.error(e, "cannot connect to {}, retrying in {}", connFactory, reconnectionDelay)
+          setTimer("reconnect", 'connect, reconnectionDelay, true)
+        }
       }
     }
     /*
