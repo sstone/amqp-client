@@ -6,6 +6,7 @@ import com.rabbitmq.client.{Channel, Envelope}
 import akka.actor.{Actor, Props, ActorRef, ActorSystem}
 import akka.actor.FSM.{SubscribeTransitionCallBack, CurrentState, Transition}
 import java.util.concurrent.CountDownLatch
+import java.util.Date
 
 object Amqp {
 
@@ -69,13 +70,13 @@ object Amqp {
 
   case class DeclareQueue(queue: QueueParameters)
 
-  case class DeleteQueue(name : String, ifUnused : Boolean = false, ifEmpty : Boolean = false)
+  case class DeleteQueue(name: String, ifUnused: Boolean = false, ifEmpty: Boolean = false)
 
-  case class PurgeQueue(name : String)
+  case class PurgeQueue(name: String)
 
   case class DeclareExchange(exchange: ExchangeParameters)
 
-  case class DeleteExchange(name : String, ifUnused : Boolean = false)
+  case class DeleteExchange(name: String, ifUnused: Boolean = false)
 
   case class QueueBind(queue: String, exchange: String, routing_key: String, args: Map[String, AnyRef] = Map.empty)
 
@@ -85,7 +86,7 @@ object Amqp {
 
   case class Delivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte])
 
-  case class Publish(exchange: String, key: String, buffer: Array[Byte], mandatory: Boolean = true, immediate: Boolean = false)
+  case class Publish(exchange: String, key: String, body: Array[Byte], properties: Option[BasicProperties] = None, mandatory: Boolean = true, immediate: Boolean = false)
 
   case class Ack(deliveryTag: Long)
 
@@ -95,10 +96,10 @@ object Amqp {
 
   case class Error(e: Throwable)
 
-  /** executes a callback when a connection or channel actors is "connected" i.e. usable
+  /**executes a callback when a connection or channel actors is "connected" i.e. usable
    * <ul>
-   *   <li>for a connection actor, connected means that it is connected to the AMQP broker</li>
-   *   <li>for a channel actor, connected means that it is has a valid channel (sent by its connection parent)</li>
+   * <li>for a connection actor, connected means that it is connected to the AMQP broker</li>
+   * <li>for a channel actor, connected means that it is has a valid channel (sent by its connection parent)</li>
    * </ul>
    * this is a simple wrapper around the FSM state monitoring tools provided by Akka, since ConnectionOwner and ChannelOwner
    * are state machines with 2 states (Disconnected and Connected)
@@ -121,7 +122,7 @@ object Amqp {
     channelOrConnectionActor ! SubscribeTransitionCallBack(m)
   }
 
-  /** wait until a number of connection or channel actors are connected
+  /**wait until a number of connection or channel actors are connected
    *
    * @param system actor system (will be used to create temporary watchers)
    * @param actors set of reference to ConnectionOwner or ChannelOwner actors

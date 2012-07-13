@@ -73,6 +73,7 @@
                                 <jvmArgs>
                                     <jvmArg>-Xms64m</jvmArg>
                                     <jvmArg>-Xmx1024m</jvmArg>
+                                    <jvmArgs>-Yrepl-sync</jvmArgs>
                                 </jvmArgs>
                             </configuration>
                         </plugin>

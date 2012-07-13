@@ -16,6 +16,7 @@ import akka.dispatch.Await
 import akka.util.Timeout._
 import akka.pattern.ask
 import akka.util.Timeout
+import com.rabbitmq.client.AMQP.BasicProperties
 
 @RunWith(classOf[JUnitRunner])
 class ChannelOwnerSpec extends BasicAmqpTestSpec {
@@ -69,7 +70,8 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       check3 match {
         case ok: Queue.DeleteOk => {}
         case Amqp.Error(cause) => {
-          println(cause); throw cause
+          println(cause);
+          throw cause
         }
       }
       system.stop(instance)
@@ -115,6 +117,23 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       val message = "yo!".getBytes
       producer ! Publish(exchange.name, "my_key", message)
       probe.expectMsgClass(1 second, classOf[Delivery])
+      system.stop(conn)
+    }
+  }
+
+  "Producers" should {
+    "be able to specify custom message properties" in {
+      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
+      val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
+      val queue = QueueParameters(name = "", passive = false, exclusive = true)
+      val probe = TestProbe()
+      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", true)), probe.ref)), 5000 millis)
+      val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
+      waitForConnection(system, conn, consumer, producer).await()
+      val message = "yo!".getBytes
+      producer ! Publish(exchange.name, "my_key", message, Some(new BasicProperties.Builder().contentType("my content").build()))
+      val delivery = probe.receiveOne(1 second).asInstanceOf[Delivery]
+      assert(delivery.properties.getContentType == "my content")
       system.stop(conn)
     }
   }

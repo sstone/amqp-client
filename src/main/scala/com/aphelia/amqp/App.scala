@@ -10,7 +10,7 @@ import akka.actor.FSM.{Transition, SubscribeTransitionCallBack}
 import com.aphelia.amqp.Amqp._
 import java.util.concurrent.CountDownLatch
 import akka.util.Timeout
-import com.rabbitmq.client.AMQP.Queue
+import com.rabbitmq.client.AMQP.{BasicProperties, Queue}
 import akka.actor.Status.Failure
 
 
@@ -32,6 +32,37 @@ object App {
       case uh => println(uh)
     }
     system.stop(conn)
+  }
+
+  def testProperties() {
+    val system = ActorSystem("MySystem")
+    val connFactory = new ConnectionFactory()
+    connFactory.setHost("localhost")
+    // create a "connection owner" actor, which will try and reconnect automatically if the connection ins lost
+    val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "conn")
+    // use the standard direct exchange
+    val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
+    // and an exclusive, private queue (name = "" means that the broker will generate a random name)
+    val queue = QueueParameters(name = "my_queue", passive = false, exclusive = true, autodelete = true)
+
+    val foo = system.actorOf(Props(new Actor {
+      def receive = {
+        case d@Delivery(tag, envelope, properties, body) => {
+          println("got a message")
+          println(properties)
+          sender ! Ack(envelope.getDeliveryTag)
+        }
+      }
+    }))
+    // create a consumer that will pass all messages to the foo Actor; the consumer will declare the bindings
+    val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", autoack = false)), foo)), 5000 millis)
+    val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
+    waitForConnection(system, consumer, producer).await()
+    producer ! Publish("amq.direct", "my_key", "yo!".getBytes, Some(new BasicProperties.Builder().contentType("my content").build()))
+    Thread.sleep(1000)
+    consumer ! PoisonPill
+    producer ! PoisonPill
+    system.shutdown()
   }
 
   /**
@@ -85,7 +116,7 @@ object App {
     val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
     val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(Binding(exchange, queue, "my_key", true) :: Nil, foo)))
     waitForConnection(system, producer, consumer).await()
-    for (i <- 0 to 10) producer ! Transaction(Publish("amq.direct", "my_key", "yo".getBytes, true, false) :: Nil)
+    for (i <- 0 to 10) producer ! Transaction(Publish("amq.direct", "my_key", "yo".getBytes, mandatory = true, immediate = false) :: Nil)
     consumer ! PoisonPill
     producer ! PoisonPill
     foo ! PoisonPill
@@ -140,7 +171,7 @@ object App {
   }
 
   def main(args: Array[String]) {
-    foo()
+    testProperties()
     var serverMode = false
     var host = "localhost"
     var exchange = "amq.direct"

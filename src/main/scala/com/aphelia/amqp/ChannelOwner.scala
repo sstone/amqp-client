@@ -26,13 +26,22 @@ object ChannelOwner {
 
   private[amqp] case class Connected(channel: com.rabbitmq.client.Channel) extends Data
 
-  def withChannel[T](channel : Channel)(f : Channel => T) = {
+  def withChannel[T](channel: Channel)(f: Channel => T) = {
     try {
       f(channel)
     }
     catch {
-      case e : IOException => Amqp.Error(e)
+      case e: IOException => Amqp.Error(e)
     }
+  }
+
+  def publishMessage(channel: Channel, publish: Publish) {
+    import publish._
+    val props = properties match {
+      case Some(p) => p
+      case None => new AMQP.BasicProperties.Builder().build()
+    }
+    channel.basicPublish(exchange, key, mandatory, immediate, props, body)
   }
 }
 
@@ -103,13 +112,17 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
      * sent by the actor's parent when the AMQP connection is lost
      */
     case Event(Shutdown(cause), _) => goto(Disconnected)
-    case Event(Publish(exchange, routingKey, body, mandatory, immediate), Connected(channel)) => {
-      channel.basicPublish(exchange, routingKey, mandatory, immediate, new AMQP.BasicProperties.Builder().build(), body)
+    case Event(Publish(exchange, routingKey, body, properties, mandatory, immediate), Connected(channel)) => {
+      val props = properties match {
+        case Some(p) => p
+        case None => new AMQP.BasicProperties.Builder().build()
+      }
+      channel.basicPublish(exchange, routingKey, mandatory, immediate, props, body)
       stay
     }
     case Event(Transaction(publish), Connected(channel)) => {
       channel.txSelect()
-      publish.foreach(p => channel.basicPublish(p.exchange, p.key, p.mandatory, p.immediate, new AMQP.BasicProperties.Builder().build(), p.buffer))
+      publish.foreach(p => channel.basicPublish(p.exchange, p.key, p.mandatory, p.immediate, new AMQP.BasicProperties.Builder().build(), p.body))
       channel.txCommit()
       stay
     }
@@ -170,6 +183,7 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
 
 class Consumer(bindings: List[Binding], listener: Option[ActorRef], channelParams: Option[ChannelParameters] = None) extends ChannelOwner(channelParams) {
   def this(bindings: List[Binding], listener: ActorRef, channelParams: Option[ChannelParameters]) = this(bindings, Some(listener), channelParams)
+
   def this(bindings: List[Binding], listener: ActorRef) = this(bindings, Some(listener))
 
   var consumer: Option[DefaultConsumer] = None
@@ -286,8 +300,14 @@ class RpcClient(channelParams: Option[ChannelParameters] = None) extends Channel
   when(ChannelOwner.Connected) {
     case Event(Request(publish, numberOfResponses), ChannelOwner.Connected(channel)) => {
       counter = counter + 1
-      val props = new BasicProperties.Builder().correlationId(counter.toString).replyTo(queue).build()
-      publish.foreach(r => channel.basicPublish(r.exchange, r.key, r.mandatory, r.immediate, props, r.buffer))
+      publish.foreach(p => {
+        val builder = p.properties match {
+          case Some(b) => b.builder
+          case None => new BasicProperties.Builder()
+        }
+        val props = builder.correlationId(counter.toString).replyTo(queue).build()
+        channel.basicPublish(p.exchange, p.key, p.mandatory, p.immediate, props, p.body)
+      })
       correlationMap += (counter.toString -> RpcResult(sender, numberOfResponses, collection.mutable.ListBuffer.empty[Array[Byte]]))
       stay
     }
