@@ -11,6 +11,8 @@ import collection.mutable
 import com.aphelia.amqp.Amqp._
 import akka.actor.Status.Failure
 import java.io.IOException
+import com.aphelia.amqp.RpcServer.ProcessResult
+import com.aphelia.amqp.RpcClient.RpcResult
 
 object ChannelOwner {
 
@@ -212,10 +214,16 @@ class Consumer(bindings: List[Binding], listener: Option[ActorRef], channelParam
 
 object RpcServer {
 
-  trait IProcessor {
-    def process(delivery: Delivery): Option[Array[Byte]]
+  /**
+   * represents the result of a "process"
+   * @param value optional message body
+   * @param properties optional message properties
+   */
+  case class ProcessResult(value: Option[Array[Byte]], properties: Option[BasicProperties] = None)
 
-    def onFailure(delivery: Delivery, e: Exception): Option[Array[Byte]]
+  trait IProcessor {
+    def process(delivery: Delivery): ProcessResult
+    def onFailure(delivery: Delivery, e: Exception): ProcessResult
   }
 
 }
@@ -224,18 +232,24 @@ class RpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channe
   def this(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None)
   = this(List(Binding(exchange, queue, routingKey, false)), processor, channelParams)
 
+  def sendResponse(result: ProcessResult, properties: BasicProperties, channel : Channel) {
+    result match {
+      // send a reply only if processor return something *and* replyTo is set
+      case ProcessResult(Some(data), customProperties) if (properties.getReplyTo != null) => {
+        // publish the response with the same correlation id as the request
+        val props = customProperties.getOrElse(new BasicProperties()).builder().correlationId(properties.getCorrelationId).build()
+        channel.basicPublish("", properties.getReplyTo, true, false, props, data)
+      }
+      case _ => {}
+    }
+  }
+
   when(ChannelOwner.Connected) {
     case Event(delivery@Delivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]), ChannelOwner.Connected(channel)) => {
       log.debug("processing delivery")
       try {
-        processor.process(delivery) match {
-          // send a reply only if processor return something *and* replyTo is set
-          case Some(data) if (properties.getReplyTo != null) => {
-            val props = new BasicProperties.Builder().correlationId(properties.getCorrelationId).build()
-            channel.basicPublish("", properties.getReplyTo, true, false, props, data)
-          }
-          case _ => {}
-        }
+        val result = processor.process(delivery)
+        sendResponse(result, properties, channel)
         channel.basicAck(envelope.getDeliveryTag, false)
       }
       catch {
@@ -250,9 +264,9 @@ class RpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channe
             // second failure: reply with an error message, ack the message
             case true => {
               log.error(e, "processing {} failed for the second time, acking message", delivery)
-              processor.onFailure(delivery, e) match {
-                case Some(data) if (properties.getReplyTo != null) => {
-                  val props = new BasicProperties.Builder().correlationId(properties.getCorrelationId).build()
+              val result = processor.onFailure(delivery, e) match {
+                case ProcessResult(Some(data), customProperties) if (properties.getReplyTo != null) => {
+                  val props = customProperties.getOrElse(new BasicProperties()).builder().correlationId(properties.getCorrelationId).build()
                   channel.basicPublish("", properties.getReplyTo, true, false, props, data)
                 }
                 case _ => {}
@@ -269,12 +283,11 @@ class RpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channe
 
 object RpcClient {
 
-  private[amqp] case class RpcResult(destination: ActorRef, expected: Int, buffers: scala.collection.mutable.ListBuffer[Array[Byte]])
+  private[amqp] case class RpcResult(destination: ActorRef, expected: Int, deliveries: scala.collection.mutable.ListBuffer[Delivery])
 
-  private[amqp] case class Request(publish: List[Publish], numberOfResponses: Int)
+  case class Request(publish: List[Publish], numberOfResponses: Int = 1)
 
-  case class Response(buffers: List[Array[Byte]])
-
+  case class Response(deliveries: List[Delivery])
 }
 
 class RpcClient(channelParams: Option[ChannelParameters] = None) extends ChannelOwner(channelParams) {
@@ -301,23 +314,19 @@ class RpcClient(channelParams: Option[ChannelParameters] = None) extends Channel
     case Event(Request(publish, numberOfResponses), ChannelOwner.Connected(channel)) => {
       counter = counter + 1
       publish.foreach(p => {
-        val builder = p.properties match {
-          case Some(b) => b.builder
-          case None => new BasicProperties.Builder()
-        }
-        val props = builder.correlationId(counter.toString).replyTo(queue).build()
+        val props = p.properties.getOrElse(new BasicProperties()).builder.correlationId(counter.toString).replyTo(queue).build()
         channel.basicPublish(p.exchange, p.key, p.mandatory, p.immediate, props, p.body)
       })
-      correlationMap += (counter.toString -> RpcResult(sender, numberOfResponses, collection.mutable.ListBuffer.empty[Array[Byte]]))
+      correlationMap += (counter.toString -> RpcResult(sender, numberOfResponses, collection.mutable.ListBuffer.empty[Delivery]))
       stay
     }
-    case Event(Delivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]), ChannelOwner.Connected(channel)) => {
+    case Event(delivery@Delivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]), ChannelOwner.Connected(channel)) => {
       channel.basicAck(envelope.getDeliveryTag, false)
       if (correlationMap.contains(properties.getCorrelationId)) {
         val results = correlationMap.get(properties.getCorrelationId).get
-        results.buffers += body
-        if (results.buffers.length == results.expected) {
-          results.destination ! Response(results.buffers.toList)
+        results.deliveries += delivery
+        if (results.deliveries.length == results.expected) {
+          results.destination ! Response(results.deliveries.toList)
           correlationMap -= properties.getCorrelationId
         }
       }

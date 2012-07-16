@@ -10,7 +10,7 @@ import akka.dispatch.Future
 import akka.dispatch.ExecutionContext
 import com.aphelia.amqp.RpcClient.{Request, Response}
 import com.aphelia.amqp.Amqp._
-import com.aphelia.amqp.RpcServer.IProcessor
+import com.aphelia.amqp.RpcServer.{ProcessResult, IProcessor}
 import com.rabbitmq.client.AMQP.Queue
 import akka.dispatch.Await
 import akka.util.Timeout._
@@ -149,10 +149,10 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
           println("processing")
           val s = new String(delivery.body)
           if (s == "5") throw new Exception("I dont do 5s")
-          Some(delivery.body)
+          ProcessResult(Some(delivery.body))
         }
 
-        def onFailure(delivery: Delivery, e: Exception) = Some(e.toString.getBytes)
+        def onFailure(delivery: Delivery, e: Exception) = ProcessResult(Some(e.toString.getBytes))
       }
       val server = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "my_key", proc)), 2000 millis)
       val client1 = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000 millis)
@@ -165,7 +165,7 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
           try {
             val future = client1.ask(Request(Publish("amq.direct", "my_key", i.toString.getBytes) :: Nil, 1))(1000 millis)
             val result = Await.result(future, 1000 millis).asInstanceOf[Response]
-            println("result1 " + new String(result.buffers.head))
+            println("result1 " + new String(result.deliveries.head.body))
             Thread.sleep(300)
           }
           catch {
@@ -178,7 +178,7 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
           try {
             val future = client2.ask(Request(Publish("amq.direct", "my_key", i.toString.getBytes) :: Nil, 1))(1000 millis)
             val result = Await.result(future, 1000 millis).asInstanceOf[Response]
-            println("result2 " + new String(result.buffers.head))
+            println("result2 " + new String(result.deliveries.head.body))
             Thread.sleep(300)
           }
           catch {
@@ -189,6 +189,29 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       Await.result(f1, 1 minute)
       Await.result(f2, 1 minute)
       system.stop(conn)
+    }
+    "manage custom AMQP properties" in {
+      checkConnection
+      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
+      val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
+      val queue = QueueParameters(name = "my_queue", passive = false)
+      val proc = new RpcServer.IProcessor() {
+        def process(delivery: Delivery) = {
+          // return the same body with the same properties
+          ProcessResult(Some(delivery.body), Some(delivery.properties))
+        }
+
+        def onFailure(delivery: Delivery, e: Exception) = ProcessResult(Some(e.toString.getBytes), Some(delivery.properties))
+      }
+      val server = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "my_key", proc)), 2000 millis)
+      val client = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000 millis)
+      waitForConnection(system, conn, server, client).await()
+      val myprops = new BasicProperties.Builder().contentType("my content").contentEncoding("my encoding").build()
+      val future = client.ask(Request(Publish("amq.direct", "my_key", "yo!!".toString.getBytes, Some(myprops)) :: Nil, 1))(1000 millis)
+      val result = Await.result(future, 1000 millis).asInstanceOf[Response]
+      val delivery = result.deliveries.head
+      assert(delivery.properties.getContentType == "my content")
+      assert(delivery.properties.getContentEncoding == "my encoding")
     }
   }
 
@@ -201,15 +224,15 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       val queue = QueueParameters(name = "", passive = false, exclusive = true)
       // create 2 servers, each using a broker generated private queue and their own processor
       val proc1 = new IProcessor {
-        def process(delivery: Delivery) = Some("proc1".getBytes)
+        def process(delivery: Delivery) = ProcessResult(Some("proc1".getBytes))
 
-        def onFailure(delivery: Delivery, e: Exception) = None
+        def onFailure(delivery: Delivery, e: Exception) = ProcessResult(None)
       }
       val server1 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "mykey", proc1)), 2000 millis)
       val proc2 = new IProcessor {
-        def process(delivery: Delivery) = Some("proc2".getBytes)
+        def process(delivery: Delivery) = ProcessResult(Some("proc2".getBytes))
 
-        def onFailure(delivery: Delivery, e: Exception) = None
+        def onFailure(delivery: Delivery, e: Exception) = ProcessResult(None)
       }
       val server2 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "mykey", proc2)), 2000 millis)
 
@@ -217,9 +240,9 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       waitForConnection(system, conn, server1, server2, client)
       val future = client.ask(Request(Publish(exchange.name, "mykey", "yo!".getBytes) :: Nil, 2))(1000 millis)
       val result = Await.result(future, 1000 millis).asInstanceOf[Response]
-      assert(result.buffers.length == 2)
+      assert(result.deliveries.length == 2)
       // we're supposed to have received to answers, "proc1" and "proc2"
-      val strings = result.buffers.map(new String(_))
+      val strings = result.deliveries.map(d => new String(d.body))
       assert(strings.sorted == List("proc1", "proc2"))
       system.stop(conn)
     }

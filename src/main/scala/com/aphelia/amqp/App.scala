@@ -12,6 +12,7 @@ import java.util.concurrent.CountDownLatch
 import akka.util.Timeout
 import com.rabbitmq.client.AMQP.{BasicProperties, Queue}
 import akka.actor.Status.Failure
+import com.aphelia.amqp.RpcServer.ProcessResult
 
 
 object App {
@@ -137,10 +138,10 @@ object App {
     val proc = new RpcServer.IProcessor() {
       def process(delivery: Delivery) = {
         println("processing")
-        Some(delivery.body)
+        ProcessResult(Some(delivery.body))
       }
 
-      def onFailure(delivery: Delivery, e: Exception) = Some(e.toString.getBytes)
+      def onFailure(delivery: Delivery, e: Exception) = ProcessResult(Some(e.toString.getBytes))
     }
     // amq.direct is one of the standard AMQP exchanges
     val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
@@ -202,11 +203,11 @@ object App {
       val proc = new RpcServer.IProcessor() {
         def process(delivery: Delivery) = {
           println("processing" + delivery)
-          Some(delivery.body)
+          ProcessResult(Some(delivery.body))
         }
 
         // just return the input
-        def onFailure(delivery: Delivery, e: Exception) = None
+        def onFailure(delivery: Delivery, e: Exception) = ProcessResult(None)
       }
       val server = ConnectionOwner.createActor(conn,
         Props(new RpcServer(
