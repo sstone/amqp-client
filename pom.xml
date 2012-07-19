@@ -23,29 +23,8 @@
         </plugins>
     </reporting>
     <build>
+        <sourceDirectory>src/main/scala</sourceDirectory>
         <plugins>
-            <plugin>
-                <artifactId>maven-assembly-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>assembly</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>single</goal>
-                        </goals>
-                        <configuration>
-                            <descriptorRefs>
-                                <descriptorRef>jar-with-dependencies</descriptorRef>
-                            </descriptorRefs>
-                            <archive>
-                                <manifestEntries>
-                                    <Main-Class>com.aphelia.amqp.App</Main-Class>
-                                </manifestEntries>
-                            </archive>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -73,7 +52,6 @@
                                 <jvmArgs>
                                     <jvmArg>-Xms64m</jvmArg>
                                     <jvmArg>-Xmx1024m</jvmArg>
-                                    <jvmArgs>-Yrepl-sync</jvmArgs>
                                 </jvmArgs>
                             </configuration>
                         </plugin>
