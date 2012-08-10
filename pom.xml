@@ -2,15 +2,15 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.aphelia</groupId>
-    <artifactId>amqp-client</artifactId>
+    <artifactId>amqp-client_${scala.version}</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>amqp-client</name>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <scala.version>2.9.1</scala.version>
-        <akka.version>2.0.1</akka.version>
+        <scala.version>2.9.2</scala.version>
+        <akka.version>2.0.2</akka.version>
     </properties>
 
     <reporting>
@@ -152,14 +152,14 @@
         </dependency>
         <dependency>
             <groupId>org.scala-tools.testing</groupId>
-            <artifactId>specs_2.9.1</artifactId>
+            <artifactId>specs_2.9.2</artifactId>
             <version>1.6.9</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.scalatest</groupId>
-            <artifactId>scalatest_2.9.1</artifactId>
-            <version>1.6.1</version>
+            <artifactId>scalatest_2.9.2</artifactId>
+            <version>1.8</version>
             <scope>test</scope>
         </dependency>
         <dependency>
