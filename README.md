@@ -12,6 +12,25 @@ This client provides a simple API for
 
 It is based on the [Akka](http://akka.io/) 2.0 framework.
 
+## Configuring maven/sbt
+
+```xml
+<repositories>
+  <repository>
+    <id>sstone snapshots</id>
+    <url>https://github.com/sstone/sstone-mvn-repo/raw/master/snapshots</url>
+  </repository>
+</repositories>
+
+<dependencies>
+  <dependency>
+    <groupId>com.aphelia</groupId>
+    <artifactId>amqp-client_2.9.2</artifactId>
+    <version>1.0-SNAPSHOT</version>
+  </dependency>
+</dependencies>
+```
+
 ## RPC patterns
 
 Typical RPC with AMQP follows this pattern:
@@ -41,6 +60,8 @@ publish to queue 'B', 'B' processors publish to queue 'C' ....
 
 Please check ChannelOwnerSpec.scala in [src/test/scala/com/aphelia/amqp/ChannelOwnerSpec.scala](http://github.com/sstone/amqp-client/blob/master/src/test/scala/com/aphelia/amqp/ChannelOwnerSpec.scala) for
 more comprehensive samples
+
+``` scala
 
     /**
      * basic consumer/producer test
@@ -145,5 +166,7 @@ more comprehensive samples
       server2 ! PoisonPill
       system.shutdown()
     }
+````
+
 
 
