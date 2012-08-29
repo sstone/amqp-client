@@ -1,18 +1,14 @@
 package com.aphelia.amqp
 
 import collection.JavaConversions._
-import akka.util.duration._
 import com.rabbitmq.client.AMQP.BasicProperties
 import com.rabbitmq.client._
 import com.aphelia.amqp.ChannelOwner.{Data, State}
 import akka.actor.{ActorRef, Actor, FSM}
-import com.aphelia.amqp.ConnectionOwner.{CreateChannel, Shutdown}
-import collection.mutable
+import com.aphelia.amqp.ConnectionOwner.Shutdown
 import com.aphelia.amqp.Amqp._
-import akka.actor.Status.Failure
 import java.io.IOException
 import com.aphelia.amqp.RpcServer.ProcessResult
-import com.aphelia.amqp.RpcClient.RpcResult
 
 object ChannelOwner {
 
