@@ -24,7 +24,7 @@ It is based on the [Akka](http://akka.io/) 2.0 framework.
 <repositories>
   <repository>
     <id>sstone snapshots</id>
-    <url>https://github.com/sstone/sstone-mvn-repo/raw/master/snapshots</url>
+    <url>http://sstone.github.com/sstone-mvn-repo/snapshots</url>
   </repository>
 </repositories>
 
