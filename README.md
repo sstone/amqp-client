@@ -26,6 +26,10 @@ It is based on the [Akka](http://akka.io/) 2.0 framework.
     <id>sstone snapshots</id>
     <url>http://sstone.github.com/sstone-mvn-repo/snapshots</url>
   </repository>
+  <repository>
+    <id>sstone releases</id>
+    <url>http://sstone.github.com/sstone-mvn-repo/releases</url>
+  </repository>
 </repositories>
 
 <dependencies>
@@ -36,6 +40,8 @@ It is based on the [Akka](http://akka.io/) 2.0 framework.
   </dependency>
 </dependencies>
 ```
+
+The latest snapshot (development) version is 1.0-SNAPSHOT, the latest tagged version is 1.0-RC1
 
 ## Library design
 
@@ -239,6 +245,7 @@ more comprehensive samples
       system.shutdown()
     }
 ````
+
 
 
 
