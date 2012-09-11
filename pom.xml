@@ -138,11 +138,13 @@
             <groupId>com.typesafe.akka</groupId>
             <artifactId>akka-slf4j</artifactId>
             <version>${akka.version}</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
             <version>1.0.0</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.typesafe.akka</groupId>
