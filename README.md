@@ -41,7 +41,7 @@ It is based on the [Akka](http://akka.io/) 2.0 framework.
 </dependencies>
 ```
 
-The latest snapshot (development) version is 1.0-SNAPSHOT, the latest tagged version is 1.0-RC1
+The latest snapshot (development) version is 1.0-SNAPSHOT, the latest tagged version is 1.0-RC2
 
 ## Library design
 
