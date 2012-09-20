@@ -322,16 +322,13 @@ class RpcClient(channelParams: Option[ChannelParameters] = None) extends Channel
     }
     case Event(delivery@Delivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]), ChannelOwner.Connected(channel)) => {
       channel.basicAck(envelope.getDeliveryTag, false)
-      if (correlationMap.contains(properties.getCorrelationId)) {
+      if (correlationMap.contains(properties.getCorrelationId)) { // we only answer in case of a request/reply scenario
         val results = correlationMap.get(properties.getCorrelationId).get
         results.deliveries += delivery
         if (results.deliveries.length == results.expected) {
           results.destination ! Response(results.deliveries.toList)
           correlationMap -= properties.getCorrelationId
         }
-      }
-      else {
-        log.warning("unexpected message with correlation id " + properties.getCorrelationId)
       }
       stay
     }
