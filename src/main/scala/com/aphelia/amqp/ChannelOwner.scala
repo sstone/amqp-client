@@ -78,7 +78,7 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
     channel.addReturnListener(new ReturnListener() {
       def handleReturn(replyCode: Int, replyText: String, exchange: String, routingKey: String, properties: BasicProperties, body: Array[Byte]) {
         log.warning("returned message code=%d text=%s exchange=%s routing_key=%s".format(replyCode, replyText, exchange, routingKey))
-        self !('returned, replyCode, replyText, exchange, routingKey, properties, body)
+        self ! ReturnedMessage(replyCode, replyText, exchange, routingKey, properties, body)
       }
     })
     channel.addShutdownListener(new ShutdownListener {
@@ -219,6 +219,7 @@ object RpcServer {
 
   trait IProcessor {
     def process(delivery: Delivery): ProcessResult
+
     def onFailure(delivery: Delivery, e: Exception): ProcessResult
   }
 
@@ -228,7 +229,7 @@ class RpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channe
   def this(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None)
   = this(List(Binding(exchange, queue, routingKey, false)), processor, channelParams)
 
-  def sendResponse(result: ProcessResult, properties: BasicProperties, channel : Channel) {
+  def sendResponse(result: ProcessResult, properties: BasicProperties, channel: Channel) {
     result match {
       // send a reply only if processor return something *and* replyTo is set
       case ProcessResult(Some(data), customProperties) if (properties.getReplyTo != null) => {
@@ -284,6 +285,9 @@ object RpcClient {
   case class Request(publish: List[Publish], numberOfResponses: Int = 1)
 
   case class Response(deliveries: List[Delivery])
+
+  case class Undelivered(msg: ReturnedMessage)
+
 }
 
 class RpcClient(channelParams: Option[ChannelParameters] = None) extends ChannelOwner(channelParams) {
@@ -318,7 +322,7 @@ class RpcClient(channelParams: Option[ChannelParameters] = None) extends Channel
     }
     case Event(delivery@Delivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]), ChannelOwner.Connected(channel)) => {
       channel.basicAck(envelope.getDeliveryTag, false)
-      if (correlationMap.contains(properties.getCorrelationId)) {
+      if (correlationMap.contains(properties.getCorrelationId)) { // we only answer in case of a request/reply scenario
         val results = correlationMap.get(properties.getCorrelationId).get
         results.deliveries += delivery
         if (results.deliveries.length == results.expected) {
@@ -326,8 +330,16 @@ class RpcClient(channelParams: Option[ChannelParameters] = None) extends Channel
           correlationMap -= properties.getCorrelationId
         }
       }
+      stay
+    }
+    case Event(msg@ReturnedMessage(replyCode, replyText, exchange, routingKey, properties, body), ChannelOwner.Connected(channel)) => {
+      if (correlationMap.contains(properties.getCorrelationId)) {
+        val results: RpcResult = correlationMap.get(properties.getCorrelationId).get
+        results.destination ! RpcClient.Undelivered(msg)
+        correlationMap -= properties.getCorrelationId
+      }
       else {
-        log.warning("unexpected message with correlation id " + properties.getCorrelationId)
+        log.warning("unexpected returned message with correlation id " + properties.getCorrelationId)
       }
       stay
     }

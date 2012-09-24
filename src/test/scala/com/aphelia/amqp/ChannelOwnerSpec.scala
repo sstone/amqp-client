@@ -8,7 +8,7 @@ import akka.actor.{PoisonPill, Props}
 import java.util.concurrent.{TimeUnit, Executors}
 import akka.dispatch.Future
 import akka.dispatch.ExecutionContext
-import com.aphelia.amqp.RpcClient.{Request, Response}
+import com.aphelia.amqp.RpcClient.{Undelivered, Request, Response}
 import com.aphelia.amqp.Amqp._
 import com.aphelia.amqp.RpcServer.{ProcessResult, IProcessor}
 import com.rabbitmq.client.AMQP.Queue
@@ -215,6 +215,20 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
     }
   }
 
+  "RPC Clients" should {
+    "correctly handle returned message" in {
+      checkConnection
+      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
+      val client = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000 millis)
+      waitForConnection(system, conn, client)
+      implicit val timeout = Timeout(10 seconds) // needed for `?` below
+
+      val future = client.ask(Request(Publish("", "mykey", "yo!".getBytes) :: Nil, 1))(1000 millis)
+      val result = Await.result(future, 1000 millis)
+      assert(result.isInstanceOf[Undelivered])
+    }
+  }
+
   "RPC Clients and Servers" should {
     "implement 1 request/several responses patterns" in {
       checkConnection
@@ -238,8 +252,8 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
 
       val client = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000 millis)
       waitForConnection(system, conn, server1, server2, client)
-      val future = client.ask(Request(Publish(exchange.name, "mykey", "yo!".getBytes) :: Nil, 2))(1000 millis)
-      val result = Await.result(future, 1000 millis).asInstanceOf[Response]
+      val future = client.ask(Request(Publish(exchange.name, "mykey", "yo!".getBytes) :: Nil, 2))(2000 millis)
+      val result = Await.result(future, 2000 millis).asInstanceOf[Response]
       assert(result.deliveries.length == 2)
       // we're supposed to have received to answers, "proc1" and "proc2"
       val strings = result.deliveries.map(d => new String(d.body))

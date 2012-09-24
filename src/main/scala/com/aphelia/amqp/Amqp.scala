@@ -88,6 +88,8 @@ object Amqp {
 
   case class Publish(exchange: String, key: String, body: Array[Byte], properties: Option[BasicProperties] = None, mandatory: Boolean = true, immediate: Boolean = false)
 
+  case class ReturnedMessage(replyCode: Int, replyText: String, exchange: String, routingKey: String, properties: BasicProperties, body: Array[Byte])
+
   case class Ack(deliveryTag: Long)
 
   case class Reject(deliveryTag: Long, requeue: Boolean = true)
