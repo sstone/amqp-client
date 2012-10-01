@@ -54,7 +54,6 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
 
   startWith(Disconnected, Uninitialized)
 
-
   override def preRestart(reason: Throwable, message: Option[Any]) {
     log.warning("preRestart {} {}", reason, message)
     super.preRestart(reason, message)
@@ -111,46 +110,53 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
      */
     case Event(Shutdown(cause), _) => goto(Disconnected)
     case Event(Publish(exchange, routingKey, body, properties, mandatory, immediate), Connected(channel)) => {
-      val props = properties getOrElse  new AMQP.BasicProperties.Builder().build()
-      channel.basicPublish(exchange, routingKey, mandatory, immediate, props, body)
-      stay
+      val props = properties getOrElse new AMQP.BasicProperties.Builder().build()
+      stay replying withChannel(channel)(c => c.basicPublish(exchange, routingKey, mandatory, immediate, props, body))
     }
     case Event(Transaction(publish), Connected(channel)) => {
-      channel.txSelect()
-      publish.foreach(p => channel.basicPublish(p.exchange, p.key, p.mandatory, p.immediate, new AMQP.BasicProperties.Builder().build(), p.body))
-      channel.txCommit()
-      stay
+      stay replying withChannel(channel) {
+        c => {
+          c.txSelect()
+          publish.foreach(p => c.basicPublish(p.exchange, p.key, p.mandatory, p.immediate, new AMQP.BasicProperties.Builder().build(), p.body))
+          c.txCommit()
+        }
+      }
     }
     case Event(Ack(deliveryTag), Connected(channel)) => {
       log.debug("acking %d on %s".format(deliveryTag, channel))
-      channel.basicAck(deliveryTag, false)
-      stay
+      stay replying withChannel(channel)(c => c.basicAck(deliveryTag, false))
     }
     case Event(Reject(deliveryTag, requeue), Connected(channel)) => {
       log.debug("rejecting %d on %s".format(deliveryTag, channel))
-      channel.basicReject(deliveryTag, requeue)
-      stay
+      stay replying withChannel(channel)(c => c.basicReject(deliveryTag, requeue))
     }
     case Event(DeclareExchange(exchange), Connected(channel)) => {
+      log.debug("declaring exchange {}", exchange)
       stay replying withChannel(channel)(c => declareExchange(c, exchange))
     }
     case Event(DeleteExchange(exchange, ifUnused), Connected(channel)) => {
+      log.debug("deleting exchange {} ifUnused {}", exchange, ifUnused)
       stay replying withChannel(channel)(c => c.exchangeDelete(exchange, ifUnused))
     }
     case Event(DeclareQueue(queue), Connected(channel)) => {
+      log.debug("declaring queue {}", queue)
       stay replying withChannel(channel)(c => declareQueue(c, queue))
     }
     case Event(PurgeQueue(queue), Connected(channel)) => {
+      log.debug("purging queue {}", queue)
       stay replying withChannel(channel)(c => c.queuePurge(queue))
     }
     case Event(DeleteQueue(queue, ifUnused, ifEmpty), Connected(channel)) => {
+      log.debug("deleting queue {} ifUnused {} ifEmpty {}", queue, ifUnused, ifEmpty)
       stay replying withChannel(channel)(c => c.queueDelete(queue, ifUnused, ifEmpty))
     }
-    case Event(QueueBind(queue, exchange, routing_key, args), Connected(channel)) => {
-      stay replying withChannel(channel)(c => c.queueBind(queue, exchange, routing_key, args))
+    case Event(QueueBind(queue, exchange, routingKey, args), Connected(channel)) => {
+      log.debug("binding queue {} to key {} on exchange {}", queue, routingKey, exchange)
+      stay replying withChannel(channel)(c => c.queueBind(queue, exchange, routingKey, args))
     }
-    case Event(QueueUnbind(queue, exchange, routing_key, args), Connected(channel)) => {
-      stay replying withChannel(channel)(c => c.queueUnbind(queue, exchange, routing_key, args))
+    case Event(QueueUnbind(queue, exchange, routingKey, args), Connected(channel)) => {
+      log.debug("unbinding queue {} to key {} on exchange {}", queue, routingKey, exchange)
+      stay replying withChannel(channel)(c => c.queueUnbind(queue, exchange, routingKey, args))
     }
   }
 
@@ -159,7 +165,7 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
       log.info("connected")
     }
     case Connected -> Disconnected => {
-      log.warning("disconnect")
+      log.warning("disconnected")
     }
   }
 
