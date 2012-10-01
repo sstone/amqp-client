@@ -23,7 +23,7 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
 
   "ChannelOwner" should {
     "transition from Disconnected to Connected when it receives a channel" in {
-      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "conn")
+      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
       val instance = ConnectionOwner.createActor(conn, Props(new ChannelOwner()), name = Some("instance"))
       val latch = waitForConnection(system, instance)
       latch.await(6000, TimeUnit.MILLISECONDS)
@@ -70,11 +70,10 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       check3 match {
         case ok: Queue.DeleteOk => {}
         case Amqp.Error(cause) => {
-          println(cause);
+          println(cause)
           throw cause
         }
       }
-      system.stop(instance)
       system.stop(conn)
     }
     "implement basic error handling" in {
@@ -94,7 +93,7 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
 
   "Multiple ChannelOwners" should {
     "each transition from Disconnected to Connected when they receive a channel" in {
-      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "connectionOwner2")
+      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
       val concurrent = 10
       val actors = for (i <- 1 until concurrent) yield ConnectionOwner.createActor(conn, Props(new ChannelOwner()), name = Some(i + "-instance"))
       val latch = waitForConnection(system, actors: _*)
@@ -107,7 +106,7 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
   "Consumers" should {
     "receive messages sent by producers" in {
       checkConnection
-      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "conn")
+      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "", passive = false, exclusive = true)
       val probe = TestProbe()
@@ -123,17 +122,36 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
 
   "Producers" should {
     "be able to specify custom message properties" in {
+      checkConnection
       val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
-      val queue = QueueParameters(name = "", passive = false, exclusive = true)
+      val queue = QueueParameters(name = "queue", passive = false, exclusive = false)
       val probe = TestProbe()
-      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", true)), probe.ref)), 5000 millis)
+      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", autoack = true)), probe.ref)), 5000 millis)
       val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
       waitForConnection(system, conn, consumer, producer).await()
       val message = "yo!".getBytes
       producer ! Publish(exchange.name, "my_key", message, Some(new BasicProperties.Builder().contentType("my content").build()))
       val delivery = probe.receiveOne(1 second).asInstanceOf[Delivery]
       assert(delivery.properties.getContentType == "my content")
+      system.stop(conn)
+    }
+    "publish messages within an AMQP transaction" in {
+      checkConnection
+      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
+      val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
+      val queue = QueueParameters(name = "my_queue", passive = false)
+      val probe = TestProbe()
+      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", autoack = true)), probe.ref)), 5000 millis)
+      val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
+      waitForConnection(system, conn, consumer, producer).await()
+      val message = "yo!".getBytes
+      producer ! Transaction(List(Publish(exchange.name, "my_key", message), Publish(exchange.name, "my_key", message), Publish(exchange.name, "my_key", message)))
+      var received = List[Delivery]()
+      probe.receiveWhile(2 seconds) {
+        case message: Delivery => received = message :: received
+      }
+      assert(received.length === 3)
       system.stop(conn)
     }
   }
@@ -232,7 +250,7 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
   "RPC Clients and Servers" should {
     "implement 1 request/several responses patterns" in {
       checkConnection
-      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "conn")
+      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       // empty means that a random name will be generated when the queue is declared
       val queue = QueueParameters(name = "", passive = false, exclusive = true)
