@@ -71,7 +71,7 @@ class RpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channe
               log.error(e, "processing {} failed, rejecting message", delivery)
               channel.basicReject(envelope.getDeliveryTag, true)
             }
-            // second failure: reply with an error message, ack the message
+            // second failure: reply with an error message, reject the message
             case true => {
               log.error(e, "processing {} failed for the second time, acking message", delivery)
               val result = processor.onFailure(delivery, e) match {
@@ -81,7 +81,7 @@ class RpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channe
                 }
                 case _ => {}
               }
-              channel.basicAck(envelope.getDeliveryTag, false)
+              channel.basicReject(envelope.getDeliveryTag, false)
             }
           }
         }
