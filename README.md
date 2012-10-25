@@ -45,9 +45,12 @@ The latest snapshot (development) version is 1.0-SNAPSHOT, the latest tagged ver
 
 ## Library design
 
-I guess that if you ended up here you already know a bit about AMQP 0.9.1. There are very nice tutorial on the
-[RabbitMQ](http://www.rabbitmq.com/) website, and also [there](http://www.zeromq.org/whitepapers:amqp-analysis), and
-probably many other...
+This is a thin wrapper over the RabbitMQ java client, which tries to take advantage of the nice actor model provided
+by the Akka library. There is no effort to "hide/encapsulate" the RabbitMQ library (and I don't really see the point anyway
+since AMQP is a binary protocol spec, not an API spec).
+So to make the most of this library you should first check the documentation for the RabbitMQ client, and learn a bit
+about AMQP 0.9.1. There are very nice tutorial on the [RabbitMQ](http://www.rabbitmq.com/) website, and
+also [there](http://www.zeromq.org/whitepapers:amqp-analysis), and probably many other...
 
 ### Connection and channel management
 
@@ -61,7 +64,7 @@ ConnectionOwner and ChannelOwner are implemened as Akka actors, using Akka super
 * when a connection is lost, the connection owner will create a new connection and provide each of its children with a
 new channel
 
-YMMV, but using few connections (one per JVM) and many channels per connection is a common practice.
+YMMV, but using few connections (one per JVM) and many channels per connection (one per thread) is a common practice.
 
 ### Basic usage
 

@@ -7,13 +7,13 @@ import com.rabbitmq.client.AMQP.BasicProperties
 
 /**
  * Create an AMQP consumer, which takes a list of AMQP bindings, a listener to forward messages to, and optional channel parameters.
- * For each (Exchange, Queue, RoutingKey) biding, the consumer will
+ * For each (Exchange, Queue, RoutingKey) biding, the consumer will:
  * <ul>
  *   <li>declare the exchange</li>
  *   <li>declare the queue</li>
  *   <li>bind the queue to the routing key on the exchange</li>
  *   <li>consume messages from the queue</li>
- *   <li>forward them to the listener actor</li>
+ *   <li>forward them to the listener actor, wrapped in a [[com.aphelia.amqp.Amqp.Delivery]] instance</li>
  * </ul>
  * @param bindings list of bindings
  * @param listener optional listener actor; if not set, self will be used instead
