@@ -29,7 +29,7 @@ object App {
     implicit val timeout = Timeout(2 seconds)
     val check = Await.result(c.ask(DeclareQueue(QueueParameters("no_such_queue", passive = true))), timeout.duration)
     check match {
-      case Amqp.Error(cause) => { println(cause) }
+      case Amqp.Error(_, cause) => throw cause
       case uh => println(uh)
     }
     system.stop(conn)

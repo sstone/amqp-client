@@ -6,7 +6,6 @@ import com.rabbitmq.client.{Channel, Envelope}
 import akka.actor.{Actor, Props, ActorRef, ActorSystem}
 import akka.actor.FSM.{SubscribeTransitionCallBack, CurrentState, Transition}
 import java.util.concurrent.CountDownLatch
-import java.util.Date
 
 object Amqp {
 
@@ -68,35 +67,61 @@ object Amqp {
    */
   case class ChannelParameters(qos: Int)
 
-  case class DeclareQueue(queue: QueueParameters)
+  /**
+   * requests that can be sent to a ChannelOwner actor
+   */
 
-  case class DeleteQueue(name: String, ifUnused: Boolean = false, ifEmpty: Boolean = false)
+  sealed trait Request
 
-  case class PurgeQueue(name: String)
+  case class DeclareQueue(queue: QueueParameters) extends Request
 
-  case class DeclareExchange(exchange: ExchangeParameters)
+  case class DeleteQueue(name: String, ifUnused: Boolean = false, ifEmpty: Boolean = false) extends Request
 
-  case class DeleteExchange(name: String, ifUnused: Boolean = false)
+  case class PurgeQueue(name: String) extends Request
 
-  case class QueueBind(queue: String, exchange: String, routing_key: String, args: Map[String, AnyRef] = Map.empty)
+  case class DeclareExchange(exchange: ExchangeParameters) extends Request
 
-  case class QueueUnbind(queue: String, exchange: String, routing_key: String, args: Map[String, AnyRef] = Map.empty)
+  case class DeleteExchange(name: String, ifUnused: Boolean = false) extends Request
 
-  case class Binding(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, autoack: Boolean)
+  case class QueueBind(queue: String, exchange: String, routing_key: String, args: Map[String, AnyRef] = Map.empty) extends Request
 
+  case class QueueUnbind(queue: String, exchange: String, routing_key: String, args: Map[String, AnyRef] = Map.empty) extends Request
+
+  case class Binding(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, autoack: Boolean) extends Request
+
+  case class Publish(exchange: String, key: String, body: Array[Byte], properties: Option[BasicProperties] = None, mandatory: Boolean = true, immediate: Boolean = false) extends Request
+
+  case class Ack(deliveryTag: Long) extends Request
+
+  case class Reject(deliveryTag: Long, requeue: Boolean = true)  extends Request
+
+  case class Transaction(publish: List[Publish]) extends Request
+
+  /**
+   * sent back by a publisher when the request was processed successfully but there is nothing more more meaningful to
+   * return
+   * @param request original request
+   */
+  case class Ok(request:Request)
+
+  case class Error(request:Request, reason:Throwable)
+
+
+  /**
+   * AMQP delivery, which is sent to the actor that you register with a Consumer
+   * @param consumerTag AMQP consumer tag
+   * @param envelope AMQP envelope
+   * @param properties AMQP properties
+   * @param body message body
+   * @see [[com.aphelia.amqp.Consumer]]
+   */
   case class Delivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte])
 
-  case class Publish(exchange: String, key: String, body: Array[Byte], properties: Option[BasicProperties] = None, mandatory: Boolean = true, immediate: Boolean = false)
-
+  /**
+   * wrapper for returned, or undelivered, messages i.e. messages published with the immediate flag an and an
+   * (exchange, key) pair for which the broker could not find any destination
+   */
   case class ReturnedMessage(replyCode: Int, replyText: String, exchange: String, routingKey: String, properties: BasicProperties, body: Array[Byte])
-
-  case class Ack(deliveryTag: Long)
-
-  case class Reject(deliveryTag: Long, requeue: Boolean = true)
-
-  case class Transaction(publish: List[Publish])
-
-  case class Error(e: Throwable)
 
   /**executes a callback when a connection or channel actors is "connected" i.e. usable
    * <ul>
@@ -124,8 +149,8 @@ object Amqp {
     channelOrConnectionActor ! SubscribeTransitionCallBack(m)
   }
 
-  /**wait until a number of connection or channel actors are connected
-   *
+  /**
+   * wait until a number of connection or channel actors are connected
    * @param system actor system (will be used to create temporary watchers)
    * @param actors set of reference to ConnectionOwner or ChannelOwner actors
    * @return a CountDownLatch object you can wait on; its count will reach 0 when all actors are connected

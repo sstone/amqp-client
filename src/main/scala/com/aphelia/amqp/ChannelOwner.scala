@@ -24,22 +24,13 @@ object ChannelOwner {
 
   private[amqp] case class Connected(channel: com.rabbitmq.client.Channel) extends Data
 
-  def withChannel[T](channel: Channel)(f: Channel => T) = {
+  def withChannel[T](channel: Channel, request: Request)(f: Channel => T) = {
     try {
       f(channel)
     }
     catch {
-      case e: IOException => Amqp.Error(e)
+      case e: IOException => Amqp.Error(request, e)
     }
-  }
-
-  def publishMessage(channel: Channel, publish: Publish) {
-    import publish._
-    val props = properties match {
-      case Some(p) => p
-      case None => new AMQP.BasicProperties.Builder().build()
-    }
-    channel.basicPublish(exchange, key, mandatory, immediate, props, body)
   }
 }
 
@@ -109,54 +100,64 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
      * sent by the actor's parent when the AMQP connection is lost
      */
     case Event(Shutdown(cause), _) => goto(Disconnected)
-    case Event(Publish(exchange, routingKey, body, properties, mandatory, immediate), Connected(channel)) => {
+    case Event(request@Publish(exchange, routingKey, body, properties, mandatory, immediate), Connected(channel)) => {
       val props = properties getOrElse new AMQP.BasicProperties.Builder().build()
-      stay replying withChannel(channel)(c => c.basicPublish(exchange, routingKey, mandatory, immediate, props, body))
+      stay replying withChannel(channel, request)(c => {
+        c.basicPublish(exchange, routingKey, mandatory, immediate, props, body)
+        Ok(request)
+      })
     }
-    case Event(Transaction(publish), Connected(channel)) => {
-      stay replying withChannel(channel) {
+    case Event(request@Transaction(publish), Connected(channel)) => {
+      stay replying withChannel(channel, request) {
         c => {
           c.txSelect()
           publish.foreach(p => c.basicPublish(p.exchange, p.key, p.mandatory, p.immediate, new AMQP.BasicProperties.Builder().build(), p.body))
           c.txCommit()
+          Ok(request)
         }
       }
     }
-    case Event(Ack(deliveryTag), Connected(channel)) => {
+    case Event(request@Ack(deliveryTag), Connected(channel)) => {
       log.debug("acking %d on %s".format(deliveryTag, channel))
-      stay replying withChannel(channel)(c => c.basicAck(deliveryTag, false))
+      stay replying withChannel(channel, request)(c => {
+        c.basicAck(deliveryTag, false)
+        Ok(request)
+      })
     }
-    case Event(Reject(deliveryTag, requeue), Connected(channel)) => {
+    case Event(request@Reject(deliveryTag, requeue), Connected(channel)) => {
       log.debug("rejecting %d on %s".format(deliveryTag, channel))
-      stay replying withChannel(channel)(c => c.basicReject(deliveryTag, requeue))
+      stay replying withChannel(channel, request)(c => {
+        c.basicReject(deliveryTag, requeue)
+        Ok(request)
+      })
     }
-    case Event(DeclareExchange(exchange), Connected(channel)) => {
+    case Event(request@DeclareExchange(exchange), Connected(channel)) => {
       log.debug("declaring exchange {}", exchange)
-      stay replying withChannel(channel)(c => declareExchange(c, exchange))
+      stay replying withChannel(channel, request)(c => declareExchange(c, exchange))
     }
-    case Event(DeleteExchange(exchange, ifUnused), Connected(channel)) => {
+    case Event(request@DeleteExchange(exchange, ifUnused), Connected(channel)) => {
       log.debug("deleting exchange {} ifUnused {}", exchange, ifUnused)
-      stay replying withChannel(channel)(c => c.exchangeDelete(exchange, ifUnused))
+      stay replying withChannel(channel, request)(c => c.exchangeDelete(exchange, ifUnused))
     }
-    case Event(DeclareQueue(queue), Connected(channel)) => {
+    case Event(request@DeclareQueue(queue), Connected(channel)) => {
       log.debug("declaring queue {}", queue)
-      stay replying withChannel(channel)(c => declareQueue(c, queue))
+      stay replying withChannel(channel, request)(c => declareQueue(c, queue))
     }
-    case Event(PurgeQueue(queue), Connected(channel)) => {
+    case Event(request@PurgeQueue(queue), Connected(channel)) => {
       log.debug("purging queue {}", queue)
-      stay replying withChannel(channel)(c => c.queuePurge(queue))
+      stay replying withChannel(channel, request)(c => c.queuePurge(queue))
     }
-    case Event(DeleteQueue(queue, ifUnused, ifEmpty), Connected(channel)) => {
+    case Event(request@DeleteQueue(queue, ifUnused, ifEmpty), Connected(channel)) => {
       log.debug("deleting queue {} ifUnused {} ifEmpty {}", queue, ifUnused, ifEmpty)
-      stay replying withChannel(channel)(c => c.queueDelete(queue, ifUnused, ifEmpty))
+      stay replying withChannel(channel, request)(c => c.queueDelete(queue, ifUnused, ifEmpty))
     }
-    case Event(QueueBind(queue, exchange, routingKey, args), Connected(channel)) => {
+    case Event(request@QueueBind(queue, exchange, routingKey, args), Connected(channel)) => {
       log.debug("binding queue {} to key {} on exchange {}", queue, routingKey, exchange)
-      stay replying withChannel(channel)(c => c.queueBind(queue, exchange, routingKey, args))
+      stay replying withChannel(channel, request)(c => c.queueBind(queue, exchange, routingKey, args))
     }
-    case Event(QueueUnbind(queue, exchange, routingKey, args), Connected(channel)) => {
+    case Event(request@QueueUnbind(queue, exchange, routingKey, args), Connected(channel)) => {
       log.debug("unbinding queue {} to key {} on exchange {}", queue, routingKey, exchange)
-      stay replying withChannel(channel)(c => c.queueUnbind(queue, exchange, routingKey, args))
+      stay replying withChannel(channel, request)(c => c.queueUnbind(queue, exchange, routingKey, args))
     }
   }
 

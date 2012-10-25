@@ -49,7 +49,7 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       println(check1)
       check1 match {
         case ok: Queue.DeclareOk => assert(ok.getMessageCount == 1)
-        case Amqp.Error(cause) => throw cause
+        case Amqp.Error(_, cause) => throw cause
       }
 
       // purge the queue
@@ -60,7 +60,7 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
         1 second)
       check2 match {
         case ok: Queue.DeclareOk => assert(ok.getMessageCount == 0)
-        case Amqp.Error(cause) => throw cause
+        case Amqp.Error(_, cause) => throw cause
       }
       // delete the queue
       val check3 = Await.result(
@@ -69,10 +69,7 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       println(check3)
       check3 match {
         case ok: Queue.DeleteOk => {}
-        case Amqp.Error(cause) => {
-          println(cause)
-          throw cause
-        }
+        case Amqp.Error(_, cause) => throw cause
       }
       system.stop(conn)
     }
