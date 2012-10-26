@@ -98,12 +98,21 @@ object Amqp {
   case class Transaction(publish: List[Publish]) extends Request
 
   /**
-   * sent back by a publisher when the request was processed successfully but there is nothing more more meaningful to
-   * return
+   * sent back by a publisher when the request was processed successfully
    * @param request original request
+   * @param result optional result. Each request maps directly to a RabbitMQ Channel method: DeclareQueue maps to
+   *               Channel.queueDeclare(), Publish maps to Channel.basicPublish() ...
+   *               When the Channel methods returns something, result wraps that something, otherwise it is empty
+   *               For example:
+   *
    */
-  case class Ok(request:Request)
+  case class Ok(request:Request, result:Option[AnyRef] = None)
 
+  /**
+   * sent back by a publisher when the request was not processed successfully
+   * @param request original request
+   * @param reason whatever error that was thrown when the request was processed
+   */
   case class Error(request:Request, reason:Throwable)
 
 

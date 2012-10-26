@@ -4,11 +4,10 @@ import collection.JavaConversions._
 import com.rabbitmq.client.AMQP.BasicProperties
 import com.rabbitmq.client._
 import com.aphelia.amqp.ChannelOwner.{Data, State}
-import akka.actor.{ActorRef, Actor, FSM}
+import akka.actor.{Actor, FSM}
 import com.aphelia.amqp.ConnectionOwner.Shutdown
 import com.aphelia.amqp.Amqp._
 import java.io.IOException
-import com.aphelia.amqp.RpcServer.ProcessResult
 
 object ChannelOwner {
 
@@ -133,31 +132,31 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
     }
     case Event(request@DeclareExchange(exchange), Connected(channel)) => {
       log.debug("declaring exchange {}", exchange)
-      stay replying withChannel(channel, request)(c => declareExchange(c, exchange))
+      stay replying withChannel(channel, request)(c => Ok(request, Some(declareExchange(c, exchange))))
     }
     case Event(request@DeleteExchange(exchange, ifUnused), Connected(channel)) => {
       log.debug("deleting exchange {} ifUnused {}", exchange, ifUnused)
-      stay replying withChannel(channel, request)(c => c.exchangeDelete(exchange, ifUnused))
+      stay replying withChannel(channel, request)(c => Ok(request, Some(c.exchangeDelete(exchange, ifUnused))))
     }
     case Event(request@DeclareQueue(queue), Connected(channel)) => {
       log.debug("declaring queue {}", queue)
-      stay replying withChannel(channel, request)(c => declareQueue(c, queue))
+      stay replying withChannel(channel, request)(c => Ok(request, Some(declareQueue(c, queue))))
     }
     case Event(request@PurgeQueue(queue), Connected(channel)) => {
       log.debug("purging queue {}", queue)
-      stay replying withChannel(channel, request)(c => c.queuePurge(queue))
+      stay replying withChannel(channel, request)(c => Ok(request, Some(c.queuePurge(queue))))
     }
     case Event(request@DeleteQueue(queue, ifUnused, ifEmpty), Connected(channel)) => {
       log.debug("deleting queue {} ifUnused {} ifEmpty {}", queue, ifUnused, ifEmpty)
-      stay replying withChannel(channel, request)(c => c.queueDelete(queue, ifUnused, ifEmpty))
+      stay replying withChannel(channel, request)(c => Ok(request, Some(c.queueDelete(queue, ifUnused, ifEmpty))))
     }
     case Event(request@QueueBind(queue, exchange, routingKey, args), Connected(channel)) => {
       log.debug("binding queue {} to key {} on exchange {}", queue, routingKey, exchange)
-      stay replying withChannel(channel, request)(c => c.queueBind(queue, exchange, routingKey, args))
+      stay replying withChannel(channel, request)(c => Ok(request, Some(c.queueBind(queue, exchange, routingKey, args))))
     }
     case Event(request@QueueUnbind(queue, exchange, routingKey, args), Connected(channel)) => {
       log.debug("unbinding queue {} to key {} on exchange {}", queue, routingKey, exchange)
-      stay replying withChannel(channel, request)(c => c.queueUnbind(queue, exchange, routingKey, args))
+      stay replying withChannel(channel, request)(c => Ok(request, Some(c.queueUnbind(queue, exchange, routingKey, args))))
     }
   }
 
