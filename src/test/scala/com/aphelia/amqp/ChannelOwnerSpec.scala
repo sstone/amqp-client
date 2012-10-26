@@ -4,7 +4,7 @@ import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import akka.testkit.TestProbe
 import akka.util.duration._
-import akka.actor.{PoisonPill, Props}
+import akka.actor.Props
 import java.util.concurrent.{TimeUnit, Executors}
 import akka.dispatch.Future
 import akka.dispatch.ExecutionContext
@@ -43,34 +43,22 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       instance ! QueueBind(queue, "amq.direct", "my_test_key")
       instance ! Publish("amq.direct", "my_test_key", "yo!".getBytes)
       // check that there is 1 message in the queue
-      val check1 = Await.result(
+      val Amqp.Ok(_, Some(check1:Queue.DeclareOk)) = Await.result(
         instance.ask(DeclareQueue(QueueParameters(queue, passive = true))),
         1 second)
-      println(check1)
-      check1 match {
-        case ok: Queue.DeclareOk => assert(ok.getMessageCount == 1)
-        case Amqp.Error(_, cause) => throw cause
-      }
+      assert(check1.getMessageCount === 1)
 
       // purge the queue
       instance ! PurgeQueue(queue)
       // check that there are no more messages in the queue
-      val check2 = Await.result(
+      val Amqp.Ok(_, Some(check2:Queue.DeclareOk)) = Await.result(
         instance.ask(DeclareQueue(QueueParameters(queue, passive = true))),
         1 second)
-      check2 match {
-        case ok: Queue.DeclareOk => assert(ok.getMessageCount == 0)
-        case Amqp.Error(_, cause) => throw cause
-      }
+      assert(check2.getMessageCount === 0)
       // delete the queue
-      val check3 = Await.result(
+      val Amqp.Ok(_, Some(check3:Queue.DeleteOk)) = Await.result(
         instance.ask(DeleteQueue(queue)),
         1 second)
-      println(check3)
-      check3 match {
-        case ok: Queue.DeleteOk => {}
-        case Amqp.Error(_, cause) => throw cause
-      }
       system.stop(conn)
     }
     "implement basic error handling" in {
@@ -83,7 +71,7 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
         instance.ask(DeclareQueue(QueueParameters("no_such_queue", passive = true))),
         1 second)
       println(check1)
-      assert(check1.getClass == classOf[Amqp.Error])
+      assert(check1.getClass === classOf[Amqp.Error])
       system.stop(conn)
     }
   }
