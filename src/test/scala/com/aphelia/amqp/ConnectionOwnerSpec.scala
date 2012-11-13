@@ -12,12 +12,11 @@ class ConnectionOwnerSpec extends BasicAmqpTestSpec {
 
   "ConnectionOwner" should {
     "provide a working userfriendly constructor" in {
-      val conn = system.actorOf(Props(new ConnectionOwner(vhost = "/")), name = "connection")
-      waitForConnection(system, conn).await()
+      val conn = new RabbitMQConnection(vhost = "/", name = "conn").start
       val p = TestProbe()
-      p.send(conn, CreateChannel)
+      p.send(conn.owner, CreateChannel)
       p.expectMsgClass(2 second, classOf[Channel])
-      system stop conn
+      conn.stop
     }
   }
 
