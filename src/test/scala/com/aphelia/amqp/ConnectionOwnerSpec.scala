@@ -2,13 +2,24 @@ package com.aphelia.amqp
 
 import akka.testkit.TestProbe
 import akka.actor.Props
-import akka.util.Duration
 import akka.util.duration._
 import com.aphelia.amqp.ConnectionOwner.CreateChannel
 import com.rabbitmq.client.Channel
 import com.aphelia.amqp.Amqp._
 
 class ConnectionOwnerSpec extends BasicAmqpTestSpec {
+
+
+  "ConnectionOwner" should {
+    "provide a working userfriendly constructor" in {
+      val conn = new RabbitMQConnection(vhost = "/", name = "conn").start
+      val p = TestProbe()
+      p.send(conn.owner, CreateChannel)
+      p.expectMsgClass(2 second, classOf[Channel])
+      conn.stop
+    }
+  }
+
   "ConnectionOwner" should {
     "provide channels for many child actors" in {
       val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "connection-owner")

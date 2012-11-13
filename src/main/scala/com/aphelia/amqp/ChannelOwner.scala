@@ -33,6 +33,7 @@ object ChannelOwner {
   }
 }
 
+
 /**
  * Channel owners are created by connection owners and hold an AMQP channel which is used to do
  * basically everything: create queues and bindings, publish messages, consume messages...
