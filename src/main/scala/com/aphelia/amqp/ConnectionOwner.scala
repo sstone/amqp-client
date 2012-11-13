@@ -5,10 +5,14 @@ import java.io.IOException
 import com.aphelia.amqp.ConnectionOwner._
 import akka.util.Duration
 import com.rabbitmq.client.{Connection, ShutdownSignalException, ShutdownListener, ConnectionFactory}
-import akka.actor.{ActorRef, FSM, Actor, Props}
+import akka.actor._
 import akka.dispatch.Await
 import akka.util.Timeout._
 import akka.pattern.ask
+import com.aphelia.amqp.ConnectionOwner.CreateChannel
+import com.aphelia.amqp.ConnectionOwner.Create
+import scala.Some
+import com.aphelia.amqp.ConnectionOwner.Shutdown
 
 object ConnectionOwner {
 
@@ -31,20 +35,20 @@ object ConnectionOwner {
   case class Create(props: Props, name: Option[String] = None)
 
   /** ask a ConnectionOwner to create a "channel owner" actor (producer, consumer, rpc client or server
-   * ... or even you own)
-   *
-   * @param conn ConnectionOwner actor
-   * @param props actor configuration object
-   * @param name optional actor name
-   * @param timeout time out
-   * @return a reference to to created actor
-   */
-  def createActor(conn: ActorRef, props: Props, name: Option[String] = None, timeout: Duration = 5000 millis) : ActorRef = {
+    * ... or even you own)
+    *
+    * @param conn ConnectionOwner actor
+    * @param props actor configuration object
+    * @param name optional actor name
+    * @param timeout time out
+    * @return a reference to to created actor
+    */
+  def createActor(conn: ActorRef, props: Props, name: Option[String] = None, timeout: Duration = 5000 millis): ActorRef = {
     val future = conn.ask(Create(props, name))(timeout).mapTo[ActorRef]
     Await.result(future, timeout)
   }
 
-  def createActor(conn: ActorRef, props: Props, timeout: Duration) : ActorRef = createActor(conn, props, None, timeout)
+  def createActor(conn: ActorRef, props: Props, timeout: Duration): ActorRef = createActor(conn, props, None, timeout)
 
   /**
    * creates an amqp uri from a ConnectionFactory. From the specs:
@@ -58,6 +62,16 @@ object ConnectionOwner {
    */
   def toUri(cf: ConnectionFactory): String = {
     "amqp://%s:%s@%s:%d/%s".format(cf.getUsername, cf.getPassword, cf.getHost, cf.getPort, cf.getVirtualHost)
+  }
+
+  def buildConnFactory(host: String = "localhost", port: Int = 5672, vhost: String = "/", user: String = "guest", password: String = "guest"): ConnectionFactory = {
+    val connFactory = new ConnectionFactory()
+    connFactory.setHost(host)
+    connFactory.setPort(port)
+    connFactory.setVirtualHost(vhost)
+    connFactory.setUsername(user)
+    connFactory.setPassword(password)
+    connFactory
   }
 }
 
@@ -76,6 +90,8 @@ object ConnectionOwner {
  * @param reconnectionDelay delay between reconnection attempts
  */
 class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: Duration = 10000 millis) extends Actor with FSM[State, Data] {
+
+  def this(host: String = "localhost", port: Int = 5672, vhost: String = "/", user: String = "guest", password: String = "guest", reconnectionDelay: Duration = 10000 millis) = this(buildConnFactory(host = host, port = port, vhost = vhost, user = user, password = password), reconnectionDelay)
 
   startWith(Disconnected, Uninitialized)
 
