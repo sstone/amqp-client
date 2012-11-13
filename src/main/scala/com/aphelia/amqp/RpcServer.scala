@@ -36,13 +36,24 @@ object RpcServer {
 
 }
 
+/**
+ * RPC Server, which
+ * <ul>
+ *   <Li>consume messages from a set of queues</li>
+ *   <li>passes the message bodies to a "processor"</li>
+ *   <li>sends back the result queue specified in the "replyTo" property</li>
+ * </ul>
+ * @param bindings list of (queue, exchange, key) bindings.
+ * @param processor [[com.aphelia.amqp.RpcServer.IProcessor]] implementation
+ * @param channelParams optional channel parameters
+ */
 class RpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None) extends Consumer(bindings, None, channelParams) {
   def this(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None)
   = this(List(Binding(exchange, queue, routingKey, false)), processor, channelParams)
 
   import RpcServer._
 
-  def sendResponse(result: ProcessResult, properties: BasicProperties, channel: Channel) {
+  private def sendResponse(result: ProcessResult, properties: BasicProperties, channel: Channel) {
     result match {
       // send a reply only if processor return something *and* replyTo is set
       case ProcessResult(Some(data), customProperties) if (properties.getReplyTo != null) => {
@@ -66,21 +77,16 @@ class RpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channe
         case e: Exception => {
           // check re-delivered tag
           envelope.isRedeliver match {
-            // first failure: reject the message
+            // first failure: reject and requeue the message
             case false => {
               log.error(e, "processing {} failed, rejecting message", delivery)
               channel.basicReject(envelope.getDeliveryTag, true)
             }
-            // second failure: reply with an error message, reject the message
+            // second failure: reply with an error message, reject (but don't requeue) the message
             case true => {
               log.error(e, "processing {} failed for the second time, acking message", delivery)
-              val result = processor.onFailure(delivery, e) match {
-                case ProcessResult(Some(data), customProperties) if (properties.getReplyTo != null) => {
-                  val props = customProperties.getOrElse(new BasicProperties()).builder().correlationId(properties.getCorrelationId).build()
-                  channel.basicPublish("", properties.getReplyTo, true, false, props, data)
-                }
-                case _ => {}
-              }
+              val result = processor.onFailure(delivery, e)
+              sendResponse(result, properties, channel)
               channel.basicReject(envelope.getDeliveryTag, false)
             }
           }
