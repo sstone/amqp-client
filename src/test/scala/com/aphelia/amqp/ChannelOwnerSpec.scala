@@ -5,7 +5,7 @@ import org.scalatest.junit.JUnitRunner
 import akka.testkit.TestProbe
 import akka.util.duration._
 import akka.actor.Props
-import java.util.concurrent.{TimeUnit, Executors}
+import java.util.concurrent.{CountDownLatch, TimeUnit, Executors}
 import akka.dispatch.Future
 import akka.dispatch.ExecutionContext
 import com.aphelia.amqp.RpcClient.{Undelivered, Request, Response}
@@ -17,6 +17,8 @@ import akka.util.Timeout._
 import akka.pattern.ask
 import akka.util.Timeout
 import com.rabbitmq.client.AMQP.BasicProperties
+import com.aphelia.amqp.ConnectionOwner.CreateChannel
+import com.rabbitmq.client.Channel
 
 @RunWith(classOf[JUnitRunner])
 class ChannelOwnerSpec extends BasicAmqpTestSpec {
@@ -192,6 +194,28 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       Await.result(f1, 1 minute)
       Await.result(f2, 1 minute)
       system.stop(conn)
+    }
+    "use amq.direct as default exchange" in {
+      checkConnection
+      val conn = system.actorOf(Props(new ConnectionOwner(vhost = "/")), name = "connection")
+      val queue = QueueParameters(name = "my_queue", passive = false)
+      val latch = new CountDownLatch(1)
+      val proc = new RpcServer.IProcessor() {
+        def process(delivery: Delivery) = {
+          println("received 1 message")
+          latch.countDown()
+          ProcessResult(Some(delivery.body))
+        }
+
+        def onFailure(delivery: Delivery, e: Exception) = ProcessResult(Some(e.toString.getBytes))
+      }
+      val server = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, "my_key", proc)), 2000 millis)
+      val client = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000 millis)
+      waitForConnection(system, conn, server, client).await()
+      client.ask(Request(Publish("amq.direct", "my_key", "toto".getBytes) :: Nil, 1))(1000 millis)
+      latch.await(3, TimeUnit.SECONDS)
+      assert(latch.getCount == 0)
+      system stop conn
     }
     "manage custom AMQP properties" in {
       checkConnection

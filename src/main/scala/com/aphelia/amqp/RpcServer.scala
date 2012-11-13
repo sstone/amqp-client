@@ -36,9 +36,13 @@ object RpcServer {
 
 }
 
-class RpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None) extends Consumer(bindings, None, channelParams) {
-  def this(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None)
+class RpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: ChannelParameters = ChannelParameters(qos = 1)) extends Consumer(bindings, None, Some(channelParams)) {
+
+  def this(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: ChannelParameters = ChannelParameters(qos = 1))
   = this(List(Binding(exchange, queue, routingKey, false)), processor, channelParams)
+
+  def this(queue: QueueParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: ChannelParameters = ChannelParameters(qos = 1))
+  = this(List(Binding(ExchangeParameters("amq.direct", true, "direct", true, false), queue, routingKey, false)), processor, channelParams)
 
   import RpcServer._
 
