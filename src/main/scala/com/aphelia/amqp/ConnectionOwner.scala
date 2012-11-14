@@ -5,10 +5,15 @@ import java.io.IOException
 import com.aphelia.amqp.ConnectionOwner._
 import akka.util.Duration
 import com.rabbitmq.client.{Connection, ShutdownSignalException, ShutdownListener, ConnectionFactory}
-import akka.actor.{ActorRef, FSM, Actor, Props}
+import akka.actor._
 import akka.dispatch.Await
 import akka.util.Timeout._
 import akka.pattern.ask
+import com.aphelia.amqp.Amqp._
+import com.aphelia.amqp.ConnectionOwner.CreateChannel
+import com.aphelia.amqp.ConnectionOwner.Create
+import scala.Some
+import com.aphelia.amqp.ConnectionOwner.Shutdown
 
 object ConnectionOwner {
 
@@ -31,20 +36,29 @@ object ConnectionOwner {
   case class Create(props: Props, name: Option[String] = None)
 
   /** ask a ConnectionOwner to create a "channel owner" actor (producer, consumer, rpc client or server
-   * ... or even you own)
-   *
-   * @param conn ConnectionOwner actor
-   * @param props actor configuration object
-   * @param name optional actor name
-   * @param timeout time out
-   * @return a reference to to created actor
-   */
-  def createActor(conn: ActorRef, props: Props, name: Option[String] = None, timeout: Duration = 5000 millis) : ActorRef = {
+    * ... or even you own)
+    *
+    * @param conn ConnectionOwner actor
+    * @param props actor configuration object
+    * @param name optional actor name
+    * @param timeout time out
+    * @return a reference to to created actor
+    * @deprecated use createChildActor instead
+    */
+  @Deprecated
+  def createActor(conn: ActorRef, props: Props, name: Option[String] = None, timeout: Duration = 5000 millis): ActorRef = {
     val future = conn.ask(Create(props, name))(timeout).mapTo[ActorRef]
     Await.result(future, timeout)
   }
 
-  def createActor(conn: ActorRef, props: Props, timeout: Duration) : ActorRef = createActor(conn, props, None, timeout)
+  @Deprecated
+  def createActor(conn: ActorRef, props: Props, timeout: Duration): ActorRef = createActor(conn, props, None, timeout)
+
+  def createChildActor(conn: ActorRef, channelOwner: Props, name: Option[String] = None, timeout: Duration = 5000 millis): ActorRef = {
+    val future = conn.ask(Create(channelOwner, name))(timeout).mapTo[ActorRef]
+    Await.result(future, timeout)
+  }
+
 
   /**
    * creates an amqp uri from a ConnectionFactory. From the specs:
@@ -59,6 +73,61 @@ object ConnectionOwner {
   def toUri(cf: ConnectionFactory): String = {
     "amqp://%s:%s@%s:%d/%s".format(cf.getUsername, cf.getPassword, cf.getHost, cf.getPort, cf.getVirtualHost)
   }
+
+  def buildConnFactory(host: String = "localhost", port: Int = 5672, vhost: String = "/", user: String = "guest", password: String = "guest"): ConnectionFactory = {
+    val connFactory = new ConnectionFactory()
+    connFactory.setHost(host)
+    connFactory.setPort(port)
+    connFactory.setVirtualHost(vhost)
+    connFactory.setUsername(user)
+    connFactory.setPassword(password)
+    connFactory
+  }
+}
+
+/**
+ * Helper class that encapsulates a connection owner so that it is easier to manipulate
+ * @param host
+ * @param port
+ * @param vhost
+ * @param user
+ * @param password
+ * @param name
+ * @param reconnectionDelay
+ * @param system
+ */
+class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: String = "/", user: String = "guest", password: String = "guest", name: String, reconnectionDelay: Duration = 10000 millis, system: ActorSystem = ActorSystem("amqp-system")) {
+
+  lazy val owner = system.actorOf(Props(new ConnectionOwner(buildConnFactory(host = host, port = port, vhost = vhost, user = user, password = password), reconnectionDelay)), name = name)
+
+  def start = {
+    waitForConnection(system, owner).await()
+    this
+  }
+
+  def stop = system.stop(owner)
+
+  def createChild(props: Props, name: Option[String] = None, timeout: Duration = 5000 millis): ActorRef = {
+    val future = owner.ask(Create(props, name))(timeout).mapTo[ActorRef]
+    Await.result(future, timeout)
+  }
+
+  def createRpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters]) = {
+    createChild(Props(new RpcServer(bindings, processor, channelParams)), None)
+  }
+
+  def createRpcServer(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters]) = {
+    createChild(Props(new RpcServer(List(Binding(exchange, queue, routingKey, false)), processor, channelParams)), None)
+  }
+
+  def createRpcServer(queue: QueueParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = Some(ChannelParameters(qos = 1))) = {
+    createChild(Props(new RpcServer(List(Binding(ExchangeParameters("amq.direct", true, "direct", true, false), queue, routingKey, false)), processor, channelParams)), None)
+  }
+
+  def createRpcClient() = {
+    createChild(Props(new RpcClient()))
+  }
+
 }
 
 /**
@@ -85,7 +154,7 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: Duratio
    * @param name optional actor name
    * @return a new actor
    */
-  def createChild(props: Props, name: Option[String]) = {
+  private def createChild(props: Props, name: Option[String]) = {
     // why isn't there an actorOf(props: Props, name: Option[String] = None) ?
     name match {
       case None => context.actorOf(props)

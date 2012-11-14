@@ -5,7 +5,7 @@ import org.scalatest.junit.JUnitRunner
 import akka.testkit.TestProbe
 import akka.util.duration._
 import akka.actor.Props
-import java.util.concurrent.{TimeUnit, Executors}
+import java.util.concurrent.{CountDownLatch, TimeUnit, Executors}
 import akka.dispatch.Future
 import akka.dispatch.ExecutionContext
 import com.aphelia.amqp.RpcClient.{Undelivered, Request, Response}
@@ -43,7 +43,7 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       instance ! QueueBind(queue, "amq.direct", "my_test_key")
       instance ! Publish("amq.direct", "my_test_key", "yo!".getBytes)
       // check that there is 1 message in the queue
-      val Amqp.Ok(_, Some(check1:Queue.DeclareOk)) = Await.result(
+      val Amqp.Ok(_, Some(check1: Queue.DeclareOk)) = Await.result(
         instance.ask(DeclareQueue(QueueParameters(queue, passive = true))),
         1 second)
       assert(check1.getMessageCount === 1)
@@ -51,12 +51,12 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       // purge the queue
       instance ! PurgeQueue(queue)
       // check that there are no more messages in the queue
-      val Amqp.Ok(_, Some(check2:Queue.DeclareOk)) = Await.result(
+      val Amqp.Ok(_, Some(check2: Queue.DeclareOk)) = Await.result(
         instance.ask(DeclareQueue(QueueParameters(queue, passive = true))),
         1 second)
       assert(check2.getMessageCount === 0)
       // delete the queue
-      val Amqp.Ok(_, Some(check3:Queue.DeleteOk)) = Await.result(
+      val Amqp.Ok(_, Some(check3: Queue.DeleteOk)) = Await.result(
         instance.ask(DeleteQueue(queue)),
         1 second)
       system.stop(conn)
@@ -192,6 +192,28 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       Await.result(f1, 1 minute)
       Await.result(f2, 1 minute)
       system.stop(conn)
+    }
+    "use amq.direct as default exchange" in {
+      checkConnection
+      val conn = new RabbitMQConnection(vhost = "/", name = "conn").start
+      val latch = new CountDownLatch(2)
+      val proc = new RpcServer.IProcessor() {
+        def process(delivery: Delivery) = {
+          println("received 1 message")
+          latch.countDown()
+          ProcessResult(Some(delivery.body))
+        }
+
+        def onFailure(delivery: Delivery, e: Exception) = ProcessResult(Some(e.toString.getBytes))
+      }
+      val server = conn.createRpcServer(QueueParameters(name = "my_queue", passive = false), "my_key", proc)
+      val client = conn.createRpcClient()
+      waitForConnection(system, server, client).await()
+      client.ask(Request(Publish("amq.direct", "my_key", "toto".getBytes) :: Nil))(1 second)
+      client ! Publish("amq.direct", "my_key", "toto".getBytes)
+      latch.await(3, TimeUnit.SECONDS)
+      assert(latch.getCount == 0)
+      conn.stop
     }
     "manage custom AMQP properties" in {
       checkConnection

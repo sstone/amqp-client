@@ -48,6 +48,7 @@ object RpcServer {
  * @param channelParams optional channel parameters
  */
 class RpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None) extends Consumer(bindings, None, channelParams) {
+
   def this(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None)
   = this(List(Binding(exchange, queue, routingKey, false)), processor, channelParams)
 
