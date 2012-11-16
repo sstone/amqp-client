@@ -1,4 +1,4 @@
-organisation := "com.aphelia"
+organization := "com.aphelia"
 
 name := "amqp-client"
  
