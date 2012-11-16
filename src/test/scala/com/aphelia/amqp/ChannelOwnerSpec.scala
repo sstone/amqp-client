@@ -193,28 +193,7 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       Await.result(f2, 1 minute)
       system.stop(conn)
     }
-    "use amq.direct as default exchange" in {
-      checkConnection
-      val conn = new RabbitMQConnection(vhost = "/", name = "conn").start
-      val latch = new CountDownLatch(2)
-      val proc = new RpcServer.IProcessor() {
-        def process(delivery: Delivery) = {
-          println("received 1 message")
-          latch.countDown()
-          ProcessResult(Some(delivery.body))
-        }
 
-        def onFailure(delivery: Delivery, e: Exception) = ProcessResult(Some(e.toString.getBytes))
-      }
-      val server = conn.createRpcServer(QueueParameters(name = "my_queue", passive = false), "my_key", proc)
-      val client = conn.createRpcClient()
-      waitForConnection(system, server, client).await()
-      client.ask(Request(Publish("amq.direct", "my_key", "toto".getBytes) :: Nil))(1 second)
-      client ! Publish("amq.direct", "my_key", "toto".getBytes)
-      latch.await(3, TimeUnit.SECONDS)
-      assert(latch.getCount == 0)
-      conn.stop
-    }
     "manage custom AMQP properties" in {
       checkConnection
       val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))

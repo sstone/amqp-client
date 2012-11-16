@@ -57,6 +57,13 @@ object Amqp {
       channel.exchangeDeclare(e.name, e.exchangeType, e.durable, e.autodelete, e.args)
   }
 
+  object StandardExchanges {
+    val amqDirect = ExchangeParameters("amq.direct", passive = true, exchangeType = "direct")
+    val amqFanout = ExchangeParameters("amq.fanout", passive = true, exchangeType = "fanout")
+    val amqTopic = ExchangeParameters("amq.topic", passive = true, exchangeType = "topic")
+    val amqHeaders = ExchangeParameters("amq.headers", passive = true, exchangeType = "headers")
+    val amqMatch = ExchangeParameters("amq.match", passive = true, exchangeType = "headers")
+  }
 
   /**
    * Channel parameters
