@@ -1,17 +1,16 @@
 package com.aphelia.amqp
 
-import org.junit.runner.RunWith
-import org.scalatest.junit.JUnitRunner
-import org.scalatest.{BeforeAndAfter, WordSpec}
-import org.scalatest.matchers.ShouldMatchers
 import com.rabbitmq.client.ConnectionFactory
 import com.aphelia.amqp.Amqp.{QueueParameters, ExchangeParameters}
 import akka.testkit.TestKit
 import akka.actor.ActorSystem
+import org.specs2.mutable.Specification
+import org.specs2.time.NoTimeConversions
 
-@RunWith(classOf[JUnitRunner])
-class BasicAmqpTestSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec with ShouldMatchers with BeforeAndAfter {
+class BasicAmqpTestSpec extends TestKit(ActorSystem("TestSystem")) with Specification with NoTimeConversions {
   val connFactory = new ConnectionFactory()
+
+  sequential
 
   /**
    * standard direct exchange
@@ -40,7 +39,7 @@ class BasicAmqpTestSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec
       conn.close()
     }
     catch {
-      case e: Exception => info("cannot connect to local amqp broker, tests will not be run"); pending
+      case e: Exception => failure("cannot connect to local amqp broker, tests will not be run"); pending
     }
   }
 }

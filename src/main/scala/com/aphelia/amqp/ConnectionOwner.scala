@@ -1,19 +1,26 @@
 package com.aphelia.amqp
 
-import akka.util.duration._
+import scala.language.postfixOps
+
 import java.io.IOException
 import com.aphelia.amqp.ConnectionOwner._
-import akka.util.Duration
 import com.rabbitmq.client.{Connection, ShutdownSignalException, ShutdownListener, ConnectionFactory}
 import akka.actor._
-import akka.dispatch.Await
 import akka.util.Timeout._
 import akka.pattern.ask
-import com.aphelia.amqp.Amqp._
+import scala.concurrent.duration.Duration
+import scala.concurrent.duration._
+import scala.concurrent.Await
+import akka.util.Timeout
+import com.aphelia.amqp.Amqp.{QueueParameters, ChannelParameters, Binding, ExchangeParameters}
 import com.aphelia.amqp.ConnectionOwner.CreateChannel
+import com.aphelia.amqp.Amqp.ChannelParameters
 import com.aphelia.amqp.ConnectionOwner.Create
 import scala.Some
+import com.aphelia.amqp.Amqp.ExchangeParameters
 import com.aphelia.amqp.ConnectionOwner.Shutdown
+import com.aphelia.amqp.Amqp.Binding
+import com.aphelia.amqp.Amqp.QueueParameters
 
 object ConnectionOwner {
 
@@ -46,17 +53,17 @@ object ConnectionOwner {
     * @deprecated use createChildActor instead
     */
   @Deprecated
-  def createActor(conn: ActorRef, props: Props, name: Option[String] = None, timeout: Duration = 5000 millis): ActorRef = {
+  def createActor(conn: ActorRef, props: Props, name: Option[String] = None, timeout: Timeout = 5000.millis): ActorRef = {
     val future = conn.ask(Create(props, name))(timeout).mapTo[ActorRef]
-    Await.result(future, timeout)
+    Await.result(future, timeout.duration)
   }
 
   @Deprecated
-  def createActor(conn: ActorRef, props: Props, timeout: Duration): ActorRef = createActor(conn, props, None, timeout)
+  def createActor(conn: ActorRef, props: Props, timeout: Timeout): ActorRef = createActor(conn, props, None, timeout)
 
-  def createChildActor(conn: ActorRef, channelOwner: Props, name: Option[String] = None, timeout: Duration = 5000 millis): ActorRef = {
+  def createChildActor(conn: ActorRef, channelOwner: Props, name: Option[String] = None, timeout: Timeout = 5000.millis): ActorRef = {
     val future = conn.ask(Create(channelOwner, name))(timeout).mapTo[ActorRef]
-    Await.result(future, timeout)
+    Await.result(future, timeout.duration)
   }
 
 
@@ -96,20 +103,20 @@ object ConnectionOwner {
  * @param reconnectionDelay
  * @param system
  */
-class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: String = "/", user: String = "guest", password: String = "guest", name: String, reconnectionDelay: Duration = 10000 millis, system: ActorSystem = ActorSystem("amqp-system")) {
+class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: String = "/", user: String = "guest", password: String = "guest", name: String, reconnectionDelay: FiniteDuration = 10000.millis, system: ActorSystem = ActorSystem("amqp-system")) {
 
   lazy val owner = system.actorOf(Props(new ConnectionOwner(buildConnFactory(host = host, port = port, vhost = vhost, user = user, password = password), reconnectionDelay)), name = name)
 
   def start = {
-    waitForConnection(system, owner).await()
+    Amqp.waitForConnection(system, owner).await()
     this
   }
 
   def stop = system.stop(owner)
 
-  def createChild(props: Props, name: Option[String] = None, timeout: Duration = 5000 millis): ActorRef = {
+  def createChild(props: Props, name: Option[String] = None, timeout: Timeout = 5000.millis): ActorRef = {
     val future = owner.ask(Create(props, name))(timeout).mapTo[ActorRef]
-    Await.result(future, timeout)
+    Await.result(future, timeout.duration)
   }
 
   def createRpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters]) = {
@@ -144,7 +151,7 @@ class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: St
  * @param connFactory connection factory
  * @param reconnectionDelay delay between reconnection attempts
  */
-class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: Duration = 10000 millis) extends Actor with FSM[State, Data] {
+class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteDuration = 10000.millis) extends Actor with FSM[State, Data] {
 
   startWith(Disconnected, Uninitialized)
 
