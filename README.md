@@ -17,6 +17,11 @@ It is based on the [Akka](http://akka.io/) 2.0 framework.
 * This client is compatible with AMQP 0.9.1, not AMQP 1.0.
 * This client is most probably not easily usable from Java
 
+## "Production" status
+
+This very simple library is being used in production in a few projects now, either directly or through the
+[Akka AMQP Proxies pattern](https://github.com/sstone/akka-amqp-proxies), and so far so good....
+So it kind of works and will be maintained for some time :-)
 
 ## Configuring maven/sbt
 
@@ -36,12 +41,12 @@ It is based on the [Akka](http://akka.io/) 2.0 framework.
   <dependency>
     <groupId>com.aphelia</groupId>
     <artifactId>amqp-client_2.9.2</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.1-SNAPSHOT</version>
   </dependency>
 </dependencies>
 ```
 
-The latest snapshot (development) version is 1.0-SNAPSHOT, the latest tagged version is 1.0-RC2
+The latest snapshot (development) version is 1.1-SNAPSHOT, the latest released version is 1.0
 
 ## Library design
 
@@ -59,10 +64,13 @@ also [there](http://www.zeromq.org/whitepapers:amqp-analysis), and probably many
 * AMQP channels are multiplexed over AMQP connections. You use channels to publish and consume messages. Channels are managed
 by ChannelOwner objects.
 
-ConnectionOwner and ChannelOwner are implemened as Akka actors, using Akka supervision:
+ConnectionOwner and ChannelOwner are implemened as Akka actors, using Akka supervision and the very useful Akka FSM:
 * channel owners are created by connection owners
 * when a connection is lost, the connection owner will create a new connection and provide each of its children with a
 new channel
+* connection owners and channel owners are implemented as Finite State Machines, with 2 possible states: Connected and Disconnected
+* For a connection owner, "connected" means that it owns a valid connection to the AMQP broker
+* For a channel owner, "connected" means that it owns a valid AMQP channel
 
 YMMV, but using few connections (one per JVM) and many channels per connection (one per thread) is a common practice.
 
