@@ -111,12 +111,12 @@ class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: St
 
   def createChannelOwner(channelParams: Option[ChannelParameters] = None) = createChild(Props(new ChannelOwner(channelParams)))
 
-  def createConsumer(bindings: List[Binding], listener: ActorRef, channelParams: Option[ChannelParameters]) = {
-    createChild(Props(new Consumer(bindings, listener, channelParams)))
+  def createConsumer(bindings: List[Binding], listener: ActorRef, channelParams: Option[ChannelParameters], autoack: Boolean) = {
+    createChild(Props(new Consumer(bindings, Some(listener), channelParams, autoack)))
   }
 
-  def createConsumer(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, listener: ActorRef, channelParams: Option[ChannelParameters]) = {
-    createChild(Props(new Consumer(List(Binding(exchange, queue, routingKey, false)), listener, channelParams)))
+  def createConsumer(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, listener: ActorRef, channelParams: Option[ChannelParameters] = None, autoack: Boolean = false) = {
+    createChild(Props(new Consumer(List(Binding(exchange, queue, routingKey)), Some(listener), channelParams, autoack)))
   }
 
   def createRpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters]) = {
@@ -124,7 +124,7 @@ class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: St
   }
 
   def createRpcServer(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters]) = {
-    createChild(Props(new RpcServer(List(Binding(exchange, queue, routingKey, false)), processor, channelParams)), None)
+    createChild(Props(new RpcServer(List(Binding(exchange, queue, routingKey)), processor, channelParams)), None)
   }
 
   def createRpcClient() = {

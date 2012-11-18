@@ -74,6 +74,8 @@ object Amqp {
    */
   case class ChannelParameters(qos: Int)
 
+  case class Binding(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String)
+
   /**
    * requests that can be sent to a ChannelOwner actor
    */
@@ -93,8 +95,6 @@ object Amqp {
   case class QueueBind(queue: String, exchange: String, routing_key: String, args: Map[String, AnyRef] = Map.empty) extends Request
 
   case class QueueUnbind(queue: String, exchange: String, routing_key: String, args: Map[String, AnyRef] = Map.empty) extends Request
-
-  case class Binding(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, autoack: Boolean) extends Request
 
   case class Publish(exchange: String, key: String, body: Array[Byte], properties: Option[BasicProperties] = None, mandatory: Boolean = true, immediate: Boolean = false) extends Request
 

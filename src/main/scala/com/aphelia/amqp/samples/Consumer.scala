@@ -31,5 +31,4 @@ object Consumer extends App {
   // run the Producer sample now and see what happens
   Thread.sleep(10000)
   system.shutdown()
-
 }

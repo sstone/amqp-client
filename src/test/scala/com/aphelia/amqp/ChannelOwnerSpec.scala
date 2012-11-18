@@ -95,7 +95,7 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "", passive = false, exclusive = true)
       val probe = TestProbe()
-      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", true)), probe.ref)), 5000 millis)
+      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key")), Some(probe.ref), autoack = true)), 5000 millis)
       val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
       waitForConnection(system, conn, consumer, producer).await()
       val message = "yo!".getBytes
@@ -112,7 +112,7 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "queue", passive = false, exclusive = false)
       val probe = TestProbe()
-      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", autoack = true)), probe.ref)), 5000 millis)
+      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key")), probe.ref)), 5000 millis)
       val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
       waitForConnection(system, conn, consumer, producer).await()
       val message = "yo!".getBytes
@@ -127,7 +127,7 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "my_queue", passive = false)
       val probe = TestProbe()
-      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", autoack = true)), probe.ref)), 5000 millis)
+      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key")), Some(probe.ref), autoack = true)), 5000 millis)
       val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
       waitForConnection(system, conn, consumer, producer).await()
       val message = "yo!".getBytes
