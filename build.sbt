@@ -1,4 +1,6 @@
 name := "amqp-client"
+
+organization := "com.aphelia"
  
 version := "1.0"
  
