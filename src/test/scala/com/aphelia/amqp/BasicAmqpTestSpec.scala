@@ -1,5 +1,7 @@
 package com.aphelia.amqp
 
+import org.junit.runner._
+import org.specs2.runner.JUnitRunner
 import com.rabbitmq.client.ConnectionFactory
 import com.aphelia.amqp.Amqp.{QueueParameters, ExchangeParameters}
 import akka.testkit.TestKit
@@ -7,6 +9,8 @@ import akka.actor.ActorSystem
 import org.specs2.mutable.Specification
 import org.specs2.time.NoTimeConversions
 
+
+@RunWith(classOf[JUnitRunner])
 class BasicAmqpTestSpec extends TestKit(ActorSystem("TestSystem")) with Specification with NoTimeConversions {
   val connFactory = new ConnectionFactory()
 
