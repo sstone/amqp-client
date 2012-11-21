@@ -2,7 +2,7 @@ name := "amqp-client"
 
 organization := "com.aphelia"
  
-version := "1.0"
+version := "1.1-SNAPSHOT"
  
 scalaVersion := "2.10.0-RC2"
 
