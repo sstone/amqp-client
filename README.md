@@ -35,13 +35,25 @@ It is based on the [Akka](http://akka.io/) 2.0 framework.
 <dependencies>
   <dependency>
     <groupId>com.aphelia</groupId>
-    <artifactId>amqp-client_2.9.2</artifactId>
+    <artifactId>amqp-client_SCALA-VERSION</artifactId>
     <version>1.0-SNAPSHOT</version>
+  </dependency>
+  <dependency>
+    <groupId>com.typesafe.akka</groupId>
+    <artifactId>akka-actor_SCALA-VERSION</artifactId>
+    <version>YOUR-AKKA-VERSION</version>
   </dependency>
 </dependencies>
 ```
 
-The latest snapshot (development) version is 1.0-SNAPSHOT, the latest tagged version is 1.0-RC2
+Please note: The scope of the Akka dependency is now "provided", which means that you need to add it explicitely in your maven/sbt project.
+
+The latest snapshot (development) version is 1.1-SNAPSHOT, the latest release version is 1.0
+
+* amqp-client 1.0 is compatible with Scala 2.9.2 and Akka 2.0.3
+* amqp-client 1.1-SNAPSHOT is compatible with Scala 2.9.2 and Akka 2.0.3
+* amqp-client 1.1-SNAPSHOT is compatible with Scala 2.10.0-RC2 and Akka 2.1.0-RC2
+
 
 ## Library design
 
