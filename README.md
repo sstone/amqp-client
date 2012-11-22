@@ -43,8 +43,16 @@ So it kind of works and will be maintained for some time :-)
     <artifactId>amqp-client_2.9.2</artifactId>
     <version>1.1-SNAPSHOT</version>
   </dependency>
+  <dependency>
+    <groupId>com.typesafe.akka</groupId>
+    <artifactId>akka-actor</artifactId>
+    <version>2.0.3</version>
+  </dependency>
 </dependencies>
 ```
+
+Please note that the Akka dependency is now in the "provided" scope which means that you'll have to define it explicitely in your
+maven/sbt projects. 
 
 The latest snapshot (development) version is 1.1-SNAPSHOT, the latest released version is 1.0
 
