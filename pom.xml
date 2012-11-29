@@ -9,8 +9,8 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <scala.version>2.10.0-RC2</scala.version>
-        <akka.version>2.1.0-RC2</akka.version>
+        <scala.version>2.10.0-RC3</scala.version>
+        <akka.version>2.1.0-RC3</akka.version>
     </properties>
 
     <licenses>
@@ -164,7 +164,7 @@
         <dependency>
             <groupId>org.specs2</groupId>
             <artifactId>specs2_${scala.version}</artifactId>
-            <version>1.12.2</version>
+            <version>1.12.3</version>
             <scope>test</scope>
         </dependency>
         <dependency>
