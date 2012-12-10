@@ -3,12 +3,12 @@ package com.aphelia.amqp
 import akka.pattern.ask
 import akka.util.duration._
 import com.rabbitmq.client.ConnectionFactory
-import akka.dispatch.Await
+import akka.dispatch.{ExecutionContext, Future, Await}
 import com.aphelia.amqp.RpcClient.{Response, Request}
 import akka.actor._
 import akka.actor.FSM.{Transition, SubscribeTransitionCallBack}
 import com.aphelia.amqp.Amqp._
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.{Executors, CountDownLatch}
 import akka.util.Timeout
 import com.rabbitmq.client.AMQP.{BasicProperties, Queue}
 import akka.actor.Status.Failure
@@ -136,12 +136,14 @@ object App {
 
     // basic processor
     val proc = new RpcServer.IProcessor() {
+      implicit val ec = ExecutionContext.fromExecutorService(Executors.newCachedThreadPool())
+
       def process(delivery: Delivery) = {
         println("processing")
-        ProcessResult(Some(delivery.body))
+        Future(ProcessResult(Some(delivery.body)))
       }
 
-      def onFailure(delivery: Delivery, e: Exception) = ProcessResult(Some(e.toString.getBytes))
+      def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(Some(e.toString.getBytes))
     }
     // amq.direct is one of the standard AMQP exchanges
     val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
@@ -200,14 +202,15 @@ object App {
     val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "conn")
 
     if (serverMode) {
+      implicit val ec = ExecutionContext.fromExecutorService(Executors.newCachedThreadPool())
       val proc = new RpcServer.IProcessor() {
         def process(delivery: Delivery) = {
           println("processing" + delivery)
-          ProcessResult(Some(delivery.body))
+          Future(ProcessResult(Some(delivery.body)))
         }
 
         // just return the input
-        def onFailure(delivery: Delivery, e: Exception) = ProcessResult(None)
+        def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(None)
       }
       val server = ConnectionOwner.createActor(conn,
         Props(new RpcServer(

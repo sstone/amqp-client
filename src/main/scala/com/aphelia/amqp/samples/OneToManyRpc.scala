@@ -10,6 +10,7 @@ import com.aphelia.amqp.Amqp.Delivery
 import com.aphelia.amqp.RpcClient.Request
 import akka.util.duration._
 import akka.util.Timeout
+import akka.dispatch.Future
 
 object OneToManyRpc extends App {
   // one request/several responses pattern
@@ -33,9 +34,9 @@ object OneToManyRpc extends App {
       def process(delivery: Delivery) = {
         // assume that the message body is a string
         val response = "response to " + new String(delivery.body) + " from shard " + i
-        ProcessResult(Some(response.getBytes))
+        Future(ProcessResult(Some(response.getBytes)))
       }
-      def onFailure(delivery: Delivery, e: Exception) = ProcessResult(None) // we don't return anything
+      def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(None) // we don't return anything
     }
     conn.createRpcServer(StandardExchanges.amqDirect, privateReplyQueue, "my_key", processor, Some(ChannelParameters(qos = 1)))
   }

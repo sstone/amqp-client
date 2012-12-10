@@ -3,6 +3,7 @@ package com.aphelia.amqp
 import com.rabbitmq.client.AMQP.BasicProperties
 import com.aphelia.amqp.Amqp._
 import com.rabbitmq.client.{Envelope, Channel}
+import akka.dispatch.Future
 
 object RpcServer {
 
@@ -22,7 +23,7 @@ object RpcServer {
      * @param delivery AMQP message
      * @return a ProcessResult instance
      */
-    def process(delivery: Delivery): ProcessResult
+    def process(delivery: Delivery): Future[ProcessResult]
 
     /**
      * create a message that describes why processing a request failed. You would typically serialize the exception along with
@@ -31,7 +32,7 @@ object RpcServer {
      * @param e exception that was thrown in process()
      * @return a ProcessResult instance
      */
-    def onFailure(delivery: Delivery, e: Exception): ProcessResult
+    def onFailure(delivery: Delivery, e: Throwable): ProcessResult
   }
 
 }
@@ -69,24 +70,22 @@ class RpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channe
   when(ChannelOwner.Connected) {
     case Event(delivery@Delivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]), ChannelOwner.Connected(channel)) => {
       log.debug("processing delivery")
-      try {
-        val result = processor.process(delivery)
-        sendResponse(result, properties, channel)
-        channel.basicAck(envelope.getDeliveryTag, false)
-      }
-      catch {
-        case e: Exception => {
-          // check re-delivered tag
+      processor.process(delivery).onComplete {
+        case Right(result) => {
+          sendResponse(result, properties, channel)
+          channel.basicAck(envelope.getDeliveryTag, false)
+        }
+        case Left(error) => {
           envelope.isRedeliver match {
             // first failure: reject and requeue the message
             case false => {
-              log.error(e, "processing {} failed, rejecting message", delivery)
+              log.error(error, "processing {} failed, rejecting message", delivery)
               channel.basicReject(envelope.getDeliveryTag, true)
             }
             // second failure: reply with an error message, reject (but don't requeue) the message
             case true => {
-              log.error(e, "processing {} failed for the second time, acking message", delivery)
-              val result = processor.onFailure(delivery, e)
+              log.error(error, "processing {} failed for the second time, acking message", delivery)
+              val result = processor.onFailure(delivery, error)
               sendResponse(result, properties, channel)
               channel.basicReject(envelope.getDeliveryTag, false)
             }

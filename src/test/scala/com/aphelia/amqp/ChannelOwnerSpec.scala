@@ -152,10 +152,10 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
           println("processing")
           val s = new String(delivery.body)
           if (s == "5") throw new Exception("I dont do 5s")
-          ProcessResult(Some(delivery.body))
+          Future(ProcessResult(Some(delivery.body)))
         }
 
-        def onFailure(delivery: Delivery, e: Exception) = ProcessResult(Some(e.toString.getBytes))
+        def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(Some(e.toString.getBytes))
       }
       val server = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "my_key", proc)), 2000 millis)
       val client1 = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000 millis)
@@ -202,10 +202,10 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       val proc = new RpcServer.IProcessor() {
         def process(delivery: Delivery) = {
           // return the same body with the same properties
-          ProcessResult(Some(delivery.body), Some(delivery.properties))
+          Future(ProcessResult(Some(delivery.body), Some(delivery.properties)))
         }
 
-        def onFailure(delivery: Delivery, e: Exception) = ProcessResult(Some(e.toString.getBytes), Some(delivery.properties))
+        def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(Some(e.toString.getBytes), Some(delivery.properties))
       }
       val server = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "my_key", proc)), 2000 millis)
       val client = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000 millis)
@@ -242,15 +242,15 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       val queue = QueueParameters(name = "", passive = false, exclusive = true)
       // create 2 servers, each using a broker generated private queue and their own processor
       val proc1 = new IProcessor {
-        def process(delivery: Delivery) = ProcessResult(Some("proc1".getBytes))
+        def process(delivery: Delivery) = Future(ProcessResult(Some("proc1".getBytes)))
 
-        def onFailure(delivery: Delivery, e: Exception) = ProcessResult(None)
+        def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(None)
       }
       val server1 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "mykey", proc1)), 2000 millis)
       val proc2 = new IProcessor {
-        def process(delivery: Delivery) = ProcessResult(Some("proc2".getBytes))
+        def process(delivery: Delivery) = Future(ProcessResult(Some("proc2".getBytes)))
 
-        def onFailure(delivery: Delivery, e: Exception) = ProcessResult(None)
+        def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(None)
       }
       val server2 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "mykey", proc2)), 2000 millis)
 
