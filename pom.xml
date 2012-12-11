@@ -9,8 +9,8 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <scala.version>2.10.0-RC3</scala.version>
-        <akka.version>2.1.0-RC3</akka.version>
+        <scala.version>2.10.0-RC5</scala.version>
+        <akka.version>2.1.0-RC5</akka.version>
     </properties>
 
     <licenses>
