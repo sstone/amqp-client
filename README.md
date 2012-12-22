@@ -88,42 +88,46 @@ To create a connection, and a channel owner that you can use to publish message:
 
 ``` scala
 
-val connFactory = new ConnectionFactory()
-connFactory.setHost("rabbit")
-val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "conn")
-val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
-waitForConnection(system, consumer, producer).await()
-producer ! Publish("amq.direct", "my_key", "yo!".getBytes)
+  implicit val system = ActorSystem("mySystem")
 
+  // create an AMQP connection
+  val conn = new RabbitMQConnection(host = "localhost", name = "Connection")
+
+  // create a "channel owner" on this connection
+  val producer = conn.createChannelOwner()
+
+  // wait till everyone is actually connected to the broker
+  Amqp.waitForConnection(system, producer).await()
+
+  // send a message
+  producer ! Publish("amq.direct", "my_key", "yo!!".getBytes, properties = None, mandatory = true, immediate = false)
 
 ```
 
 To consume messages:
 
 ``` scala
-val connFactory = new ConnectionFactory()
-connFactory.setHost("localhost")
-val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "conn")
-// use the standard direct exchange
-val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
-// and a shared queue
-val queue = QueueParameters(name = "my_queue", passive = false, exclusive = true, autodelete = true)
+  implicit val system = ActorSystem("mySystem")
 
-val foo = system.actorOf(Props(new Actor {
-  def receive = {
-    case Delivery(tag, envelope, properties, body) => {
-      println("got a message")
-      println(properties)
-      sender ! Ack(envelope.getDeliveryTag)
+  // create an AMQP connection
+  val conn = new RabbitMQConnection(host = "localhost", name = "Connection")
+
+  // create an actor that will receive AMQP deliveries
+  val listener = system.actorOf(Props(new Actor {
+    protected def receive = {
+      case Delivery(consumerTag, envelope, properties, body) => {
+        println("got a message: " + new String(body))
+        sender ! Ack(envelope.getDeliveryTag)
+      }
     }
-  }
-}))
+  }))
 
-// create a consumer that will pass all messages to the foo Actor; the consumer will declare the bindings
-val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", autoack = false)), foo)), 5000 millis)
-val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
-waitForConnection(system, consumer, producer).await()
-producer ! Publish("amq.direct", "my_key", "yo!".getBytes, Some(new BasicProperties.Builder().contentType("my content").build()))
+  // create a consumer that will route incoming AMQP messages to our listener
+  val queueParams = QueueParameters("my_queue", passive = false, durable = false, exclusive = false, autodelete = true)
+  val consumer = conn.createConsumer(Amqp.StandardExchanges.amqDirect, queueParams, "my_key", listener, None)
+
+  // wait till everyone is actually connected to the broker
+  Amqp.waitForConnection(system, consumer).await()
 
 ```
 
@@ -152,118 +156,114 @@ to the shared queue used by the next step.
 For example, if you want to chain steps A, B and C, set up a shared queue for each step, have 'A' processors
 publish to queue 'B', 'B' processors publish to queue 'C' ....
 
+``` scala
+  // typical "work queue" pattern, where a job can be picked up by any running node
+  implicit val system = ActorSystem("mySystem")
+
+  // create an AMQP connection
+  val conn = new RabbitMQConnection(host = "localhost", name = "Connection")
+
+  val queueParams = QueueParameters("my_queue", passive = false, durable = false, exclusive = false, autodelete = true)
+
+  // create 2 equivalent servers
+  val rpcServers = for (i <- 1 to 2) yield {
+    // create a "processor"
+    // in real life you would use a serialization framework (json, protobuf, ....), define command messages, etc...
+    // check the Akka AMQP proxies project for examples
+    val processor = new IProcessor {
+      def process(delivery: Delivery) = {
+        // assume that the message body is a string
+        val response = "response to " + new String(delivery.body)
+        Future(ProcessResult(Some(response.getBytes)))
+      }
+      def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(None) // we don't return anything
+    }
+    conn.createRpcServer(StandardExchanges.amqDirect, queueParams, "my_key", processor, Some(ChannelParameters(qos = 1)))
+  }
+
+  val rpcClient = conn.createRpcClient()
+
+  // wait till everyone is actually connected to the broker
+  Amqp.waitForConnection(system, rpcServers: _*).await()
+  Amqp.waitForConnection(system, rpcClient).await()
+
+  implicit val timeout: Timeout = 2 seconds
+
+  for (i <- 0 to 5) {
+    val request = ("request " + i).getBytes
+    val f = (rpcClient ? Request(List(Publish("amq.direct", "my_key", request)))).mapTo[RpcClient.Response]
+    f.onComplete {
+      case Right(response) => println(new String(response.deliveries.head.body))
+      case Left(error) => println(error)
+    }
+  }
+  // wait 10 seconds and shut down
+  // run the Producer sample now and see what happens
+  Thread.sleep(10000)
+  system.shutdown()
+
+```
+
+``` scala
+
+  // one request/several responses pattern
+  implicit val system = ActorSystem("mySystem")
+
+  // create an AMQP connection
+  val conn = new RabbitMQConnection(host = "localhost", name = "Connection")
+
+  // typical "reply queue"; the name if left empty: the broker will generate a new random name
+  val privateReplyQueue = QueueParameters("", passive = false, durable = false, exclusive = true, autodelete = true)
+
+  // we have a problem that can be "sharded", we create one server per shard, and for each request we expect one
+  // response from each shard
+
+  // create one server per shard
+  val rpcServers = for (i <- 0 to 2) yield {
+    // create a "processor"
+    // in real life you would use a serialization framework (json, protobuf, ....), define command messages, etc...
+    // check the Akka AMQP proxies project for examples
+    val processor = new IProcessor {
+      def process(delivery: Delivery) = {
+        // assume that the message body is a string
+        val response = "response to " + new String(delivery.body) + " from shard " + i
+        Future(ProcessResult(Some(response.getBytes)))
+      }
+      def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(None) // we don't return anything
+    }
+    conn.createRpcServer(StandardExchanges.amqDirect, privateReplyQueue, "my_key", processor, Some(ChannelParameters(qos = 1)))
+  }
+
+  val rpcClient = conn.createRpcClient()
+
+  // wait till everyone is actually connected to the broker
+  Amqp.waitForConnection(system, rpcServers: _*).await()
+  Amqp.waitForConnection(system, rpcClient).await()
+
+  implicit val timeout: Timeout = 2 seconds
+
+  for (i <- 0 to 5) {
+    val request = ("request " + i).getBytes
+    val f = (rpcClient ? Request(List(Publish("amq.direct", "my_key", request)), 3)).mapTo[RpcClient.Response]
+    f.onComplete {
+      case Right(response) => {
+        response.deliveries.foreach(delivery => println(new String(delivery.body)))
+      }
+      case Left(error) => println(error)
+    }
+  }
+  // wait 10 seconds and shut down
+  // run the Producer sample now and see what happens
+  Thread.sleep(10000)
+  system.shutdown()
+
+```
+
 
 ## Samples
 
 Please check ChannelOwnerSpec.scala in [src/test/scala/com/aphelia/amqp/ChannelOwnerSpec.scala](http://github.com/sstone/amqp-client/blob/master/src/test/scala/com/aphelia/amqp/ChannelOwnerSpec.scala) for
 more comprehensive samples
-
-``` scala
-
-    /**
-     * basic consumer/producer test
-     */
-    def testConsumer() {
-      val system = ActorSystem("MySystem")
-      val connFactory = new ConnectionFactory()
-      connFactory.setHost("localhost")
-      // create a "connection owner" actor, which will try and reconnect automatically if the connection ins lost
-      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "conn")
-      // use the standard direct exchange
-      val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
-      // and an exclusive, private queue (name = "" means that the broker will generate a random name)
-      val queue = QueueParameters(name = "", passive = false, exclusive = true)
-
-      val foo = system.actorOf(Props(new Actor {
-        def receive = {
-          case Delivery(tag, envelope, properties, body) => {
-            println("got a message")
-            sender ! Ack(envelope.getDeliveryTag)
-          }
-        }
-      }))
-      // create a consumer that will pass all messages to the foo Actor; the consumer will declare the bindings
-      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", autoack = false)), foo)), 5000 millis)
-      val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
-      waitForConnection(system, consumer, producer).await()
-      producer ! Publish("amq.direct", "my_key", "yo!".getBytes)
-      consumer ! PoisonPill
-      producer ! PoisonPill
-      system.shutdown()
-    }
-
-    /**
-     * basic transaction test
-     */
-    def testTransactions() {
-      val system = ActorSystem("MySystem")
-      val connFactory = new ConnectionFactory()
-      connFactory.setHost("localhost")
-      // create a "connection owner" actor, which will try and reconnect automatically if the connection ins lost
-      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "conn")
-      val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
-      val queue = QueueParameters(name = "queue", passive = false, exclusive = false)
-      val foo = system.actorOf(Props(new Actor {
-        def receive = {
-          case Delivery(tag, envelope, properties, body) => println("got a message")
-        }
-      }))
-      val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
-      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(Binding(exchange, queue, "my_key", true) :: Nil, foo)))
-      waitForConnection(system, producer, consumer).await()
-      for(i <- 0 to 10) producer ! Transaction(Publish("amq.direct", "my_key", "yo".getBytes, true, false) :: Nil)
-      consumer ! PoisonPill
-      producer ! PoisonPill
-      foo ! PoisonPill
-      system.shutdown()
-    }
-
-    /**
-     * RPC sample where each request is picked up by 2 different server and results in 2 responses
-     */
-    def testMultipleResponses() {
-      val system = ActorSystem("MySystem")
-      val connFactory = new ConnectionFactory()
-      connFactory.setHost("localhost")
-      // create a "connection owner" actor, which will try and reconnect automatically if the connection ins lost
-      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "conn")
-
-      // basic processor
-      val proc = new RpcServer.IProcessor() {
-        def process(delivery : Delivery) = {
-          println("processing")
-          Some(delivery.body)
-        }
-        def onFailure(delivery : Delivery, e: Exception) = Some(e.toString.getBytes)
-      }
-      // amq.direct is one of the standard AMQP exchanges
-      val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
-      // this is how you define an exclusive, private response queue. The name is empty
-      // which means that the broker will generate a unique, random name when the queue is declared
-      val queue = QueueParameters(name = "", passive = false, exclusive = true)
-      // create 2 servers, each with its own private queue bound to the same key
-      val server1 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "my_key", proc)), 2000 millis)
-      val server2 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "my_key", proc)), 2000 millis)
-      val client = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000 millis)
-      waitForConnection(system, server1, server2, client).await()
-      for (i <-0 to 10) {
-        try {
-          // send one request and wait for 2 responses
-          val future = client.ask(Request(Publish("amq.direct", "my_key", "client1".getBytes) :: Nil, 2))(1000 millis)
-          val result = Await.result(future, 1000 millis).asInstanceOf[Response]
-          println("result : " + result)
-          Thread.sleep(100)
-        }
-        catch {
-          case e: Exception => println(e.toString)
-        }
-      }
-      client ! PoisonPill
-      server1 ! PoisonPill
-      server2 ! PoisonPill
-      system.shutdown()
-    }
-````
 
 
 
