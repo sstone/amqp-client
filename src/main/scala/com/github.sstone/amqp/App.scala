@@ -1,18 +1,16 @@
-package com.aphelia.amqp
-
-import scala.language.postfixOps
+package com.github.sstone.amqp
 
 import akka.pattern.ask
 import com.rabbitmq.client.ConnectionFactory
-import com.aphelia.amqp.RpcClient.{Response, Request}
+import RpcClient.{Response, Request}
 import akka.actor._
 import akka.actor.FSM.{Transition, SubscribeTransitionCallBack}
-import com.aphelia.amqp.Amqp._
+import Amqp._
 import java.util.concurrent.CountDownLatch
 import akka.util.Timeout
 import com.rabbitmq.client.AMQP.{BasicProperties, Queue}
 import akka.actor.Status.Failure
-import com.aphelia.amqp.RpcServer.ProcessResult
+import RpcServer.ProcessResult
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 import scala.concurrent.duration._

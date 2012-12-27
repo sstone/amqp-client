@@ -1,12 +1,12 @@
-package com.aphelia.amqp
+package com.github.sstone.amqp
 
 import akka.testkit.TestProbe
 import concurrent.duration._
 import akka.actor.Props
 import java.util.concurrent.{CountDownLatch, TimeUnit, Executors}
-import com.aphelia.amqp.RpcClient.{Undelivered, Request, Response}
-import com.aphelia.amqp.Amqp._
-import com.aphelia.amqp.RpcServer.{ProcessResult, IProcessor}
+import RpcClient.{Undelivered, Request, Response}
+import Amqp._
+import RpcServer.{ProcessResult, IProcessor}
 import com.rabbitmq.client.AMQP.Queue
 import akka.util.Timeout._
 import akka.pattern.ask

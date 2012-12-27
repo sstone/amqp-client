@@ -1,9 +1,9 @@
-package com.aphelia.amqp
+package com.github.sstone.amqp
 
 import org.junit.runner._
 import org.specs2.runner.JUnitRunner
 import com.rabbitmq.client.ConnectionFactory
-import com.aphelia.amqp.Amqp.{QueueParameters, ExchangeParameters}
+import Amqp.{QueueParameters, ExchangeParameters}
 import akka.testkit.TestKit
 import akka.actor.ActorSystem
 import org.specs2.mutable.Specification

@@ -1,9 +1,6 @@
-package com.aphelia.amqp
-
-import scala.language.postfixOps
+package com.github.sstone.amqp
 
 import java.io.IOException
-import com.aphelia.amqp.ConnectionOwner._
 import com.rabbitmq.client.{Connection, ShutdownSignalException, ShutdownListener, ConnectionFactory}
 import akka.actor._
 import akka.util.Timeout._
@@ -12,15 +9,8 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.duration._
 import scala.concurrent.Await
 import akka.util.Timeout
-import com.aphelia.amqp.Amqp.{QueueParameters, ChannelParameters, Binding, ExchangeParameters}
-import com.aphelia.amqp.ConnectionOwner.CreateChannel
-import com.aphelia.amqp.Amqp.ChannelParameters
-import com.aphelia.amqp.ConnectionOwner.Create
-import scala.Some
-import com.aphelia.amqp.Amqp.ExchangeParameters
-import com.aphelia.amqp.ConnectionOwner.Shutdown
-import com.aphelia.amqp.Amqp.Binding
-import com.aphelia.amqp.Amqp.QueueParameters
+import Amqp._
+
 
 object ConnectionOwner {
 
@@ -104,7 +94,7 @@ object ConnectionOwner {
  * @param system
  */
 class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: String = "/", user: String = "guest", password: String = "guest", name: String, reconnectionDelay: FiniteDuration = 10000.millis, system: ActorSystem = ActorSystem("amqp-system")) {
-
+  import ConnectionOwner._
   lazy val owner = system.actorOf(Props(new ConnectionOwner(buildConnFactory(host = host, port = port, vhost = vhost, user = user, password = password), reconnectionDelay)), name = name)
 
   def start = {
@@ -151,7 +141,8 @@ class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: St
  * @param connFactory connection factory
  * @param reconnectionDelay delay between reconnection attempts
  */
-class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteDuration = 10000.millis) extends Actor with FSM[State, Data] {
+class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteDuration = 10000.millis) extends Actor with FSM[ConnectionOwner.State, ConnectionOwner.Data] {
+  import ConnectionOwner._
 
   startWith(Disconnected, Uninitialized)
 

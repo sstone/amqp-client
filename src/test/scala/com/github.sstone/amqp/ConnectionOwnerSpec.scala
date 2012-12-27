@@ -1,11 +1,11 @@
-package com.aphelia.amqp
+package com.github.sstone.amqp
 
 import akka.testkit.TestProbe
 import akka.actor.Props
 import concurrent.duration._
-import com.aphelia.amqp.ConnectionOwner.CreateChannel
+import ConnectionOwner.CreateChannel
 import com.rabbitmq.client.Channel
-import com.aphelia.amqp.Amqp._
+import Amqp._
 
 class ConnectionOwnerSpec extends BasicAmqpTestSpec {
 

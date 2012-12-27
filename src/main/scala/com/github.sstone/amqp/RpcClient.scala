@@ -1,7 +1,7 @@
-package com.aphelia.amqp
+package com.github.sstone.amqp
 
 import akka.actor.ActorRef
-import com.aphelia.amqp.Amqp._
+import Amqp._
 import com.rabbitmq.client.{Envelope, Channel, DefaultConsumer}
 import com.rabbitmq.client.AMQP.BasicProperties
 

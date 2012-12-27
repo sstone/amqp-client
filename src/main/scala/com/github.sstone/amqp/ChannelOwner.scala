@@ -1,12 +1,11 @@
-package com.aphelia.amqp
+package com.github.sstone.amqp
 
 import collection.JavaConversions._
 import com.rabbitmq.client.AMQP.BasicProperties
 import com.rabbitmq.client._
-import com.aphelia.amqp.ChannelOwner.{Data, State}
 import akka.actor.{Actor, FSM}
-import com.aphelia.amqp.ConnectionOwner.Shutdown
-import com.aphelia.amqp.Amqp._
+import ConnectionOwner.Shutdown
+import Amqp._
 import java.io.IOException
 
 object ChannelOwner {
@@ -39,7 +38,7 @@ object ChannelOwner {
  * basically everything: create queues and bindings, publish messages, consume messages...
  * @param channelParams
  */
-class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Actor with FSM[State, Data] {
+class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Actor with FSM[ChannelOwner.State, ChannelOwner.Data] {
 
   import ChannelOwner._
 

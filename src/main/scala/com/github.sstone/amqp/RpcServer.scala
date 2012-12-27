@@ -1,7 +1,7 @@
-package com.aphelia.amqp
+package com.github.sstone.amqp
 
+import Amqp._
 import com.rabbitmq.client.AMQP.BasicProperties
-import com.aphelia.amqp.Amqp._
 import com.rabbitmq.client.{Envelope, Channel}
 
 object RpcServer {
@@ -44,7 +44,7 @@ object RpcServer {
  *   <li>sends back the result queue specified in the "replyTo" property</li>
  * </ul>
  * @param bindings list of (queue, exchange, key) bindings.
- * @param processor [[com.aphelia.amqp.RpcServer.IProcessor]] implementation
+ * @param processor [[com.github.sstone.amqp.RpcServer.IProcessor]] implementation
  * @param channelParams optional channel parameters
  */
 class RpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None) extends Consumer(bindings, None, channelParams) {

@@ -1,11 +1,18 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    <groupId>com.aphelia</groupId>
+    <parent>
+        <groupId>org.sonatype.oss</groupId>
+        <artifactId>oss-parent</artifactId>
+        <version>7</version>
+    </parent>
+    <groupId>com.github.sstone</groupId>
     <artifactId>amqp-client_${scala.version}</artifactId>
     <version>1.1-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>amqp-client</name>
+    <description>Simple AMQP client for Scala/Akka</description>
+    <url>https://github.com/sstone/amqp-client</url>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -21,6 +28,19 @@
         </license>
     </licenses>
 
+    <scm>
+        <connection>scm:git:git@github.com:sstone/amqp-clientgit</connection>
+        <developerConnection>scm:git:git@github.com:sstone/amqp-client.git</developerConnection>
+        <url>git@github.com:sstone/amqp-client.git</url>
+    </scm>
+
+    <developers>
+        <developer>
+            <id>sstone</id>
+            <email>samuel.stone@hotmail.co.za</email>
+        </developer>
+    </developers>
+
     <reporting>
         <plugins>
             <plugin>
@@ -30,8 +50,8 @@
             </plugin>
         </plugins>
     </reporting>
+
     <build>
-        <sourceDirectory>src/main/scala</sourceDirectory>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -117,19 +137,6 @@
             </plugin>
         </plugins>
     </build>
-
-    <repositories>
-        <repository>
-            <id>typesafe</id>
-            <name>Typesafe Repository</name>
-            <url>http://repo.typesafe.com/typesafe/releases/</url>
-        </repository>
-        <repository>
-            <id>typesafe snapshots</id>
-            <name>Typesafe snapshots Repository</name>
-            <url>http://repo.typesafe.com/typesafe/snapshots/</url>
-        </repository>
-    </repositories>
 
     <dependencies>
         <dependency>

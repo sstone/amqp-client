@@ -1,4 +1,4 @@
-package com.aphelia.amqp
+package com.github.sstone.amqp
 
 import collection.JavaConversions._
 import com.rabbitmq.client.AMQP.BasicProperties
