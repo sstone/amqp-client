@@ -52,6 +52,7 @@
     </reporting>
 
     <build>
+        <sourceDirectory>src/main/scala</sourceDirectory>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -115,6 +116,12 @@
                         <goals>
                             <goal>compile</goal>
                             <goal>testCompile</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <goals>
+                            <goal>doc-jar</goal>
                         </goals>
                     </execution>
                 </executions>
