@@ -122,7 +122,7 @@ object Amqp {
    * @param envelope AMQP envelope
    * @param properties AMQP properties
    * @param body message body
-   * @see [[com.aphelia.amqp.Consumer]]
+   * @see [[com.github.sstone.amqp.Consumer]]
    */
   case class Delivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte])
 
