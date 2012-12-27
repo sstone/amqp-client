@@ -1,4 +1,4 @@
-package com.aphelia.amqp
+package com.github.sstone.amqp
 
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
@@ -8,9 +8,9 @@ import akka.actor.Props
 import java.util.concurrent.{CountDownLatch, TimeUnit, Executors}
 import akka.dispatch.Future
 import akka.dispatch.ExecutionContext
-import com.aphelia.amqp.RpcClient.{Undelivered, Request, Response}
-import com.aphelia.amqp.Amqp._
-import com.aphelia.amqp.RpcServer.{ProcessResult, IProcessor}
+import com.github.sstone.amqp.RpcClient.{Undelivered, Request, Response}
+import com.github.sstone.amqp.Amqp._
+import com.github.sstone.amqp.RpcServer.{ProcessResult, IProcessor}
 import com.rabbitmq.client.AMQP.Queue
 import akka.dispatch.Await
 import akka.util.Timeout._

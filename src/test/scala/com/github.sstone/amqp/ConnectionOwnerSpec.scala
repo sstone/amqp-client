@@ -1,14 +1,13 @@
-package com.aphelia.amqp
+package com.github.sstone.amqp
 
 import akka.testkit.TestProbe
 import akka.actor.Props
 import akka.util.duration._
-import com.aphelia.amqp.ConnectionOwner.CreateChannel
+import com.github.sstone.amqp.ConnectionOwner.CreateChannel
 import com.rabbitmq.client.Channel
-import com.aphelia.amqp.Amqp._
+import com.github.sstone.amqp.Amqp._
 
 class ConnectionOwnerSpec extends BasicAmqpTestSpec {
-
 
   "ConnectionOwner" should {
     "provide a working userfriendly constructor" in {

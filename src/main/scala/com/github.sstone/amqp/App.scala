@@ -1,18 +1,18 @@
-package com.aphelia.amqp
+package com.github.sstone.amqp
 
 import akka.pattern.ask
 import akka.util.duration._
 import com.rabbitmq.client.ConnectionFactory
 import akka.dispatch.{ExecutionContext, Future, Await}
-import com.aphelia.amqp.RpcClient.{Response, Request}
+import com.github.sstone.amqp.RpcClient.{Response, Request}
 import akka.actor._
 import akka.actor.FSM.{Transition, SubscribeTransitionCallBack}
-import com.aphelia.amqp.Amqp._
+import com.github.sstone.amqp.Amqp._
 import java.util.concurrent.{Executors, CountDownLatch}
 import akka.util.Timeout
 import com.rabbitmq.client.AMQP.{BasicProperties, Queue}
 import akka.actor.Status.Failure
-import com.aphelia.amqp.RpcServer.ProcessResult
+import RpcServer.ProcessResult
 
 
 object App {

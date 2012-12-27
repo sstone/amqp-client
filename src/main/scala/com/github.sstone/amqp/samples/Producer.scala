@@ -1,8 +1,8 @@
-package com.aphelia.amqp.samples
+package com.github.sstone.amqp.samples
 
 import akka.actor.ActorSystem
-import com.aphelia.amqp.{Amqp, RabbitMQConnection}
-import com.aphelia.amqp.Amqp.Publish
+import com.github.sstone.amqp.{Amqp, RabbitMQConnection}
+import com.github.sstone.amqp.Amqp.Publish
 
 object Producer extends App {
   implicit val system = ActorSystem("mySystem")

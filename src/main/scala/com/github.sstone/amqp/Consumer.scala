@@ -1,6 +1,6 @@
-package com.aphelia.amqp
+package com.github.sstone.amqp
 
-import com.aphelia.amqp.Amqp._
+import Amqp._
 import akka.actor.ActorRef
 import com.rabbitmq.client.{Envelope, Channel, DefaultConsumer}
 import com.rabbitmq.client.AMQP.BasicProperties
@@ -13,7 +13,7 @@ import com.rabbitmq.client.AMQP.BasicProperties
  *   <li>declare the queue</li>
  *   <li>bind the queue to the routing key on the exchange</li>
  *   <li>consume messages from the queue</li>
- *   <li>forward them to the listener actor, wrapped in a [[com.aphelia.amqp.Amqp.Delivery]] instance</li>
+ *   <li>forward them to the listener actor, wrapped in a [[com.github.sstone.amqp.Amqp.Delivery]] instance</li>
  * </ul>
  * @param bindings list of bindings
  * @param listener optional listener actor; if not set, self will be used instead

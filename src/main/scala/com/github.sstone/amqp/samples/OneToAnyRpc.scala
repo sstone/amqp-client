@@ -1,44 +1,38 @@
-package com.aphelia.amqp.samples
+package com.github.sstone.amqp.samples
 
 import akka.pattern.ask
 import akka.actor.{Actor, Props, ActorSystem}
-import com.aphelia.amqp.{RpcClient, Amqp, RabbitMQConnection}
-import com.aphelia.amqp.Amqp._
-import com.aphelia.amqp.RpcServer.{ProcessResult, IProcessor}
-import com.aphelia.amqp.Amqp.QueueParameters
-import com.aphelia.amqp.Amqp.Delivery
-import com.aphelia.amqp.RpcClient.Request
+import com.github.sstone.amqp.{RpcClient, Amqp, RabbitMQConnection}
+import com.github.sstone.amqp.Amqp._
+import com.github.sstone.amqp.RpcServer.{ProcessResult, IProcessor}
+import com.github.sstone.amqp.RpcClient.Request
 import akka.util.duration._
 import akka.util.Timeout
 import akka.dispatch.Future
 
-object OneToManyRpc extends App {
-  // one request/several responses pattern
+object OneToAnyRpc extends App {
+  // typical "work queue" pattern, where a job can be picked up by any running node
   implicit val system = ActorSystem("mySystem")
 
   // create an AMQP connection
   val conn = new RabbitMQConnection(host = "localhost", name = "Connection")
 
-  // typical "reply queue"; the name if left empty: the broker will generate a new random name
-  val privateReplyQueue = QueueParameters("", passive = false, durable = false, exclusive = true, autodelete = true)
+  val queueParams = QueueParameters("my_queue", passive = false, durable = false, exclusive = false, autodelete = true)
 
-  // we have a problem that can be "sharded", we create one server per shard, and for each request we expect one
-  // response from each shard
-
-  // create one server per shard
-  val rpcServers = for (i <- 0 to 2) yield {
+  // create 2 equivalent servers
+  val rpcServers = for (i <- 1 to 2) yield {
     // create a "processor"
     // in real life you would use a serialization framework (json, protobuf, ....), define command messages, etc...
     // check the Akka AMQP proxies project for examples
     val processor = new IProcessor {
       def process(delivery: Delivery) = {
         // assume that the message body is a string
-        val response = "response to " + new String(delivery.body) + " from shard " + i
+        val response = "response to " + new String(delivery.body)
         Future(ProcessResult(Some(response.getBytes)))
       }
       def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(None) // we don't return anything
     }
-    conn.createRpcServer(StandardExchanges.amqDirect, privateReplyQueue, "my_key", processor, Some(ChannelParameters(qos = 1)))
+    conn.createRpcServer(StandardExchanges.amqDirect, queueParams, "my_key", processor, Some(ChannelParameters(qos = 1)))
   }
 
   val rpcClient = conn.createRpcClient()
@@ -51,11 +45,9 @@ object OneToManyRpc extends App {
 
   for (i <- 0 to 5) {
     val request = ("request " + i).getBytes
-    val f = (rpcClient ? Request(List(Publish("amq.direct", "my_key", request)), 3)).mapTo[RpcClient.Response]
+    val f = (rpcClient ? Request(List(Publish("amq.direct", "my_key", request)))).mapTo[RpcClient.Response]
     f.onComplete {
-      case Right(response) => {
-        response.deliveries.foreach(delivery => println(new String(delivery.body)))
-      }
+      case Right(response) => println(new String(response.deliveries.head.body))
       case Left(error) => println(error)
     }
   }

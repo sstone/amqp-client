@@ -1,11 +1,11 @@
-package com.aphelia.amqp
+package com.github.sstone.amqp
 
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{BeforeAndAfter, WordSpec}
 import org.scalatest.matchers.ShouldMatchers
 import com.rabbitmq.client.ConnectionFactory
-import com.aphelia.amqp.Amqp.{QueueParameters, ExchangeParameters}
+import com.github.sstone.amqp.Amqp.{QueueParameters, ExchangeParameters}
 import akka.testkit.TestKit
 import akka.actor.ActorSystem
 

@@ -1,19 +1,14 @@
-package com.aphelia.amqp
+package com.github.sstone.amqp
 
 import akka.util.duration._
 import java.io.IOException
-import com.aphelia.amqp.ConnectionOwner._
 import akka.util.Duration
 import com.rabbitmq.client.{Connection, ShutdownSignalException, ShutdownListener, ConnectionFactory}
 import akka.actor._
 import akka.dispatch.Await
 import akka.util.Timeout._
 import akka.pattern.ask
-import com.aphelia.amqp.Amqp._
-import com.aphelia.amqp.ConnectionOwner.CreateChannel
-import com.aphelia.amqp.ConnectionOwner.Create
-import scala.Some
-import com.aphelia.amqp.ConnectionOwner.Shutdown
+import Amqp._
 
 object ConnectionOwner {
 
@@ -97,7 +92,7 @@ object ConnectionOwner {
  * @param system
  */
 class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: String = "/", user: String = "guest", password: String = "guest", name: String, reconnectionDelay: Duration = 10000 millis)(implicit system: ActorSystem) {
-
+  import ConnectionOwner._
   lazy val owner = system.actorOf(Props(new ConnectionOwner(buildConnFactory(host = host, port = port, vhost = vhost, user = user, password = password), reconnectionDelay)), name = name)
 
   def waitForConnection = Amqp.waitForConnection(system, owner)
@@ -147,8 +142,8 @@ class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: St
  * @param connFactory connection factory
  * @param reconnectionDelay delay between reconnection attempts
  */
-class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: Duration = 10000 millis) extends Actor with FSM[State, Data] {
-
+class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: Duration = 10000 millis) extends Actor with FSM[ConnectionOwner.State, ConnectionOwner.Data] {
+  import ConnectionOwner._
   startWith(Disconnected, Uninitialized)
 
   /**
