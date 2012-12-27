@@ -20,6 +20,7 @@ It is based on the [Akka](http://akka.io/) 2.0 framework.
 
 ## Configuring maven/sbt
 
+
 ```xml
 <repositories>
   <repository>
@@ -34,12 +35,12 @@ It is based on the [Akka](http://akka.io/) 2.0 framework.
 
 <dependencies>
   <dependency>
-    <groupId>com.aphelia</groupId>
+    <groupId>com.github.sstone</groupId>
     <artifactId>amqp-client_SCALA-VERSION</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.1-SNAPSHOT</version>
   </dependency>
   <dependency>
-    <groupId>com.typesafe.akka</groupId>
+    <groupId>com.github.sstone</groupId>
     <artifactId>akka-actor_SCALA-VERSION</artifactId>
     <version>YOUR-AKKA-VERSION</version>
   </dependency>
@@ -52,7 +53,7 @@ The latest snapshot (development) version is 1.1-SNAPSHOT, the latest release ve
 
 * amqp-client 1.0 is compatible with Scala 2.9.2 and Akka 2.0.3
 * amqp-client 1.1-SNAPSHOT is compatible with Scala 2.9.2 and Akka 2.0.3
-* amqp-client 1.1-SNAPSHOT is compatible with Scala 2.10.0-RC2 and Akka 2.1.0-RC2
+* amqp-client 1.1-SNAPSHOT is compatible with Scala 2.10.0 and Akka 2.1.0
 
 
 ## Library design
