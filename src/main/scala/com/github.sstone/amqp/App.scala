@@ -2,18 +2,17 @@ package com.github.sstone.amqp
 
 import akka.pattern.ask
 import com.rabbitmq.client.ConnectionFactory
-import RpcClient.{Response, Request}
+import com.github.sstone.amqp.RpcClient.{Response, Request}
 import akka.actor._
 import akka.actor.FSM.{Transition, SubscribeTransitionCallBack}
 import Amqp._
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.{Executors, CountDownLatch}
 import akka.util.Timeout
 import com.rabbitmq.client.AMQP.{BasicProperties, Queue}
 import akka.actor.Status.Failure
 import RpcServer.ProcessResult
-import scala.concurrent.Await
-import scala.concurrent.duration.Duration
-import scala.concurrent.duration._
+import concurrent.{Future, ExecutionContext, Await}
+import concurrent.duration._
 
 object App {
 
@@ -56,7 +55,7 @@ object App {
       }
     }))
     // create a consumer that will pass all messages to the foo Actor; the consumer will declare the bindings
-    val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", autoack = false)), foo)), 5000.millis)
+    val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key")), foo)), 5000.millis)
     val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
     waitForConnection(system, consumer, producer).await()
     producer ! Publish("amq.direct", "my_key", "yo!".getBytes, Some(new BasicProperties.Builder().contentType("my content").build()))
@@ -89,7 +88,7 @@ object App {
       }
     }))
     // create a consumer that will pass all messages to the foo Actor; the consumer will declare the bindings
-    val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", autoack = false)), foo)), 5000.millis)
+    val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key")), foo)), 5000.millis)
     val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
     waitForConnection(system, consumer, producer).await()
     producer ! Publish("amq.direct", "my_key", "yo!".getBytes)
@@ -115,7 +114,7 @@ object App {
       }
     }))
     val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
-    val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(Binding(exchange, queue, "my_key", true) :: Nil, foo)))
+    val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key")), Some(foo), autoack = true)))
     waitForConnection(system, producer, consumer).await()
     for (i <- 0 to 10) producer ! Transaction(Publish("amq.direct", "my_key", "yo".getBytes, mandatory = true, immediate = false) :: Nil)
     consumer ! PoisonPill
@@ -136,12 +135,14 @@ object App {
 
     // basic processor
     val proc = new RpcServer.IProcessor() {
+      implicit val ec = ExecutionContext.fromExecutorService(Executors.newCachedThreadPool())
+
       def process(delivery: Delivery) = {
         println("processing")
-        ProcessResult(Some(delivery.body))
+        Future(ProcessResult(Some(delivery.body)))
       }
 
-      def onFailure(delivery: Delivery, e: Exception) = ProcessResult(Some(e.toString.getBytes))
+      def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(Some(e.toString.getBytes))
     }
     // amq.direct is one of the standard AMQP exchanges
     val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
@@ -200,14 +201,15 @@ object App {
     val conn = system.actorOf(Props(new ConnectionOwner(connFactory)), name = "conn")
 
     if (serverMode) {
+      implicit val ec = ExecutionContext.fromExecutorService(Executors.newCachedThreadPool())
       val proc = new RpcServer.IProcessor() {
         def process(delivery: Delivery) = {
           println("processing" + delivery)
-          ProcessResult(Some(delivery.body))
+          Future(ProcessResult(Some(delivery.body)))
         }
 
         // just return the input
-        def onFailure(delivery: Delivery, e: Exception) = ProcessResult(None)
+        def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(None)
       }
       val server = ConnectionOwner.createActor(conn,
         Props(new RpcServer(

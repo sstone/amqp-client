@@ -39,9 +39,9 @@ class RpcClient(channelParams: Option[ChannelParameters] = None) extends Channel
   }
 
   when(ChannelOwner.Connected) {
-    case Event(p: Publish, ChannelOwner.Connected(channel)) => {
-      val props = p.properties.getOrElse(new BasicProperties()).builder.correlationId(counter.toString).replyTo(queue).build()
-      channel.basicPublish(p.exchange, p.key, p.mandatory, p.immediate, props, p.body)
+    case Event(Publish(exchange, key, body, properties, mandatory, immediate), ChannelOwner.Connected(channel)) => {
+      val props = properties.getOrElse(new BasicProperties()).builder.build()
+      channel.basicPublish(exchange, key, mandatory, immediate, props, body)
       stay
     }
     case Event(Request(publish, numberOfResponses), ChannelOwner.Connected(channel)) => {

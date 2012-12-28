@@ -3,6 +3,8 @@ package com.github.sstone.amqp
 import Amqp._
 import com.rabbitmq.client.AMQP.BasicProperties
 import com.rabbitmq.client.{Envelope, Channel}
+import concurrent.{ExecutionContext, Future}
+import util.{Failure, Success}
 
 object RpcServer {
 
@@ -20,18 +22,18 @@ object RpcServer {
     /**
      * process an incoming AMQP message
      * @param delivery AMQP message
-     * @return a ProcessResult instance
+     * @return a Future[ProcessResult] instance
      */
-    def process(delivery: Delivery): ProcessResult
+    def process(delivery: Delivery): Future[ProcessResult]
 
     /**
      * create a message that describes why processing a request failed. You would typically serialize the exception along with
-     * some context information
+     * some context information. 
      * @param delivery delivery which cause process() to throw an exception
      * @param e exception that was thrown in process()
      * @return a ProcessResult instance
      */
-    def onFailure(delivery: Delivery, e: Exception): ProcessResult
+    def onFailure(delivery: Delivery, e: Throwable): ProcessResult
   }
 
 }
@@ -47,10 +49,11 @@ object RpcServer {
  * @param processor [[com.github.sstone.amqp.RpcServer.IProcessor]] implementation
  * @param channelParams optional channel parameters
  */
-class RpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None) extends Consumer(bindings, None, channelParams) {
+class RpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None) extends Consumer(bindings, None, channelParams, autoack = false) {
+  import ExecutionContext.Implicits.global
 
   def this(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None)
-  = this(List(Binding(exchange, queue, routingKey, false)), processor, channelParams)
+  = this(List(Binding(exchange, queue, routingKey)), processor, channelParams)
 
   import RpcServer._
 
@@ -69,24 +72,22 @@ class RpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channe
   when(ChannelOwner.Connected) {
     case Event(delivery@Delivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]), ChannelOwner.Connected(channel)) => {
       log.debug("processing delivery")
-      try {
-        val result = processor.process(delivery)
-        sendResponse(result, properties, channel)
-        channel.basicAck(envelope.getDeliveryTag, false)
-      }
-      catch {
-        case e: Exception => {
-          // check re-delivered tag
+      processor.process(delivery).onComplete {
+        case Success(result) => {
+          sendResponse(result, properties, channel)
+          channel.basicAck(envelope.getDeliveryTag, false)
+        }
+        case Failure(error) => {
           envelope.isRedeliver match {
             // first failure: reject and requeue the message
             case false => {
-              log.error(e, "processing {} failed, rejecting message", delivery)
+              log.error(error, "processing {} failed, rejecting message", delivery)
               channel.basicReject(envelope.getDeliveryTag, true)
             }
             // second failure: reply with an error message, reject (but don't requeue) the message
             case true => {
-              log.error(e, "processing {} failed for the second time, acking message", delivery)
-              val result = processor.onFailure(delivery, e)
+              log.error(error, "processing {} failed for the second time, acking message", delivery)
+              val result = processor.onFailure(delivery, error)
               sendResponse(result, properties, channel)
               channel.basicReject(envelope.getDeliveryTag, false)
             }

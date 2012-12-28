@@ -19,7 +19,7 @@ import com.rabbitmq.client.AMQP.BasicProperties
  * @param listener optional listener actor; if not set, self will be used instead
  * @param channelParams optional channel parameters
  */
-class Consumer(bindings: List[Binding], listener: Option[ActorRef], channelParams: Option[ChannelParameters] = None) extends ChannelOwner(channelParams) {
+class Consumer(bindings: List[Binding], listener: Option[ActorRef], channelParams: Option[ChannelParameters] = None, autoack: Boolean = false) extends ChannelOwner(channelParams) {
   def this(bindings: List[Binding], listener: ActorRef, channelParams: Option[ChannelParameters]) = this(bindings, Some(listener), channelParams)
 
   def this(bindings: List[Binding], listener: ActorRef) = this(bindings, Some(listener))
@@ -31,7 +31,7 @@ class Consumer(bindings: List[Binding], listener: Option[ActorRef], channelParam
     val queueName = declareQueue(channel, binding.queue).getQueue
     declareExchange(channel, binding.exchange)
     channel.queueBind(queueName, binding.exchange.name, binding.routingKey)
-    channel.basicConsume(queueName, binding.autoack, consumer)
+    channel.basicConsume(queueName, autoack, consumer)
   }
 
   override def onChannel(channel: Channel) {

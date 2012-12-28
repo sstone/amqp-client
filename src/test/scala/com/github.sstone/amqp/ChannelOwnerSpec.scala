@@ -15,7 +15,7 @@ import com.rabbitmq.client.AMQP.BasicProperties
 import concurrent.{Future, ExecutionContext, Await}
 
 class ChannelOwnerSpec extends BasicAmqpTestSpec {
-
+  import ExecutionContext.Implicits.global
 
   "ChannelOwner" should {
     "transition from Disconnected to Connected when it receives a channel" in {
@@ -91,7 +91,7 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "", passive = false, exclusive = true)
       val probe = TestProbe()
-      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", true)), probe.ref)), 5000.millis)
+      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key")), probe.ref)), 5000.millis)
       val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
       waitForConnection(system, conn, consumer, producer).await()
       val message = "yo!".getBytes
@@ -108,7 +108,7 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "queue", passive = false, exclusive = false)
       val probe = TestProbe()
-      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", autoack = true)), probe.ref)), 5000.millis)
+      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key")), probe.ref)), 5000.millis)
       val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
       waitForConnection(system, conn, consumer, producer).await()
       val message = "yo!".getBytes
@@ -123,7 +123,7 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "my_queue", passive = false)
       val probe = TestProbe()
-      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", autoack = true)), probe.ref)), 5000.millis)
+      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key")), probe.ref)), 5000.millis)
       val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
       waitForConnection(system, conn, consumer, producer).await()
       val message = "yo!".getBytes
@@ -148,10 +148,10 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
           println("processing")
           val s = new String(delivery.body)
           if (s == "5") throw new Exception("I dont do 5s")
-          ProcessResult(Some(delivery.body))
+          Future(ProcessResult(Some(delivery.body)))
         }
 
-        def onFailure(delivery: Delivery, e: Exception) = ProcessResult(Some(e.toString.getBytes))
+        def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(Some(e.toString.getBytes))
       }
       val server = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "my_key", proc)), 2000.millis)
       val client1 = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000.millis)
@@ -189,28 +189,7 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       Await.result(f2, 1.minute)
       system.stop(conn)
     }
-    "use amq.direct as default exchange" in {
-      checkConnection
-      val conn = new RabbitMQConnection(vhost = "/", name = "conn").start
-      val latch = new CountDownLatch(2)
-      val proc = new RpcServer.IProcessor() {
-        def process(delivery: Delivery) = {
-          println("received 1 message")
-          latch.countDown()
-          ProcessResult(Some(delivery.body))
-        }
 
-        def onFailure(delivery: Delivery, e: Exception) = ProcessResult(Some(e.toString.getBytes))
-      }
-      val server = conn.createRpcServer(QueueParameters(name = "my_queue", passive = false), "my_key", proc)
-      val client = conn.createRpcClient()
-      waitForConnection(system, server, client).await()
-      client.ask(Request(Publish("amq.direct", "my_key", "toto".getBytes) :: Nil))(1.second)
-      client ! Publish("amq.direct", "my_key", "toto".getBytes)
-      latch.await(3, TimeUnit.SECONDS)
-      assert(latch.getCount == 0)
-      conn.stop
-    }
     "manage custom AMQP properties" in {
       checkConnection
       val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
@@ -219,10 +198,10 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       val proc = new RpcServer.IProcessor() {
         def process(delivery: Delivery) = {
           // return the same body with the same properties
-          ProcessResult(Some(delivery.body), Some(delivery.properties))
+          Future(ProcessResult(Some(delivery.body), Some(delivery.properties)))
         }
 
-        def onFailure(delivery: Delivery, e: Exception) = ProcessResult(Some(e.toString.getBytes), Some(delivery.properties))
+        def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(Some(e.toString.getBytes), Some(delivery.properties))
       }
       val server = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "my_key", proc)), 2000.millis)
       val client = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000.millis)
@@ -259,15 +238,15 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       val queue = QueueParameters(name = "", passive = false, exclusive = true)
       // create 2 servers, each using a broker generated private queue and their own processor
       val proc1 = new IProcessor {
-        def process(delivery: Delivery) = ProcessResult(Some("proc1".getBytes))
+        def process(delivery: Delivery) = Future(ProcessResult(Some("proc1".getBytes)))
 
-        def onFailure(delivery: Delivery, e: Exception) = ProcessResult(None)
+        def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(None)
       }
       val server1 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "mykey", proc1)), 2000.millis)
       val proc2 = new IProcessor {
-        def process(delivery: Delivery) = ProcessResult(Some("proc2".getBytes))
+        def process(delivery: Delivery) = Future(ProcessResult(Some("proc2".getBytes)))
 
-        def onFailure(delivery: Delivery, e: Exception) = ProcessResult(None)
+        def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(None)
       }
       val server2 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "mykey", proc2)), 2000.millis)
 
