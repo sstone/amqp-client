@@ -36,7 +36,7 @@ So it kind of works and will be maintained for some time :-)
 
 <dependencies>
   <dependency>
-    <groupId>com.aphelia</groupId>
+    <groupId>com.github.sstone</groupId>
     <artifactId>amqp-client_SCALA-VERSION</artifactId>
     <version>1.1-SNAPSHOT</version>
   </dependency>
