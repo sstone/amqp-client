@@ -27,27 +27,24 @@ So it kind of works and will be maintained for some time :-)
 
 
 ```xml
-<repositories>
-  <repository>
-    <id>sstone snapshots</id>
-    <url>http://sstone.github.com/sstone-mvn-repo/snapshots</url>
-  </repository>
-  <repository>
-    <id>sstone releases</id>
-    <url>http://sstone.github.com/sstone-mvn-repo/releases</url>
-  </repository>
+ <repositories>
+    <repository>
+        <id>sonatype snapshots</id>
+        <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
+    </repository>
 </repositories>
 
 <dependencies>
   <dependency>
     <groupId>com.aphelia</groupId>
-    <artifactId>amqp-client_2.9.2</artifactId>
+    <artifactId>amqp-client_SCALA-VERSION</artifactId>
     <version>1.1-SNAPSHOT</version>
   </dependency>
   <dependency>
     <groupId>com.typesafe.akka</groupId>
-    <artifactId>akka-actor</artifactId>
-    <version>2.0.3</version>
+    <artifactId>akka-actor</artifactId> <!-- for Akka 2.0.X -->
+    <artifactId>akka-actor_SCALA-VERSION</artifactId> <!-- for Akka 2.1.X -->
+    <version>AKKA-VERSION</version>
   </dependency>
 </dependencies>
 ```
@@ -154,8 +151,6 @@ Setting 'prefetch' to 1 is very useful if you need resource-based (CPU, ...) loa
 But you can also extend this pattern by setting up RPC servers which all use private exclusive queues
 bound to the same key. In this case, each server will receive the same request and will send back a response.
 This is very useful if you want to break a single operation into multiple, parallel steps.
-For example, if you want to decrypt things, you could divide the key space into N parts, set up one
-RPC server for each part, publish a single RPC request and wait for N responses.
 
 This could be further extended with a simple 'workflow' pattern where each server publishes its results
 to the shared queue used by the next step.
@@ -268,7 +263,7 @@ publish to queue 'B', 'B' processors publish to queue 'C' ....
 
 ## Samples
 
-Please check ChannelOwnerSpec.scala in [src/test/scala/com/aphelia/amqp/ChannelOwnerSpec.scala](http://github.com/sstone/amqp-client/blob/master/src/test/scala/com/aphelia/amqp/ChannelOwnerSpec.scala) for
+Please check ChannelOwnerSpec.scala in [src/test/scala/com/github.sstone/amqp/ChannelOwnerSpec.scala](http://github.com/sstone/amqp-client/blob/master/src/test/scala/com/aphelia/amqp/ChannelOwnerSpec.scala) for
 more comprehensive samples
 
 
