@@ -1,15 +1,13 @@
 package com.github.sstone.amqp
 
 import java.io.IOException
+import akka.util.Timeout
 import com.rabbitmq.client.{Connection, ShutdownSignalException, ShutdownListener, ConnectionFactory}
 import akka.actor._
-import akka.util.Timeout._
 import akka.pattern.ask
-import scala.concurrent.duration.Duration
-import scala.concurrent.duration._
-import scala.concurrent.Await
-import akka.util.Timeout
 import Amqp._
+import concurrent.Await
+import concurrent.duration._
 
 
 object ConnectionOwner {
@@ -93,14 +91,11 @@ object ConnectionOwner {
  * @param reconnectionDelay
  * @param system
  */
-class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: String = "/", user: String = "guest", password: String = "guest", name: String, reconnectionDelay: FiniteDuration = 10000.millis, system: ActorSystem = ActorSystem("amqp-system")) {
+class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: String = "/", user: String = "guest", password: String = "guest", name: String, reconnectionDelay: FiniteDuration = 10000 millis)(implicit system: ActorSystem) {
   import ConnectionOwner._
   lazy val owner = system.actorOf(Props(new ConnectionOwner(buildConnFactory(host = host, port = port, vhost = vhost, user = user, password = password), reconnectionDelay)), name = name)
 
-  def start = {
-    Amqp.waitForConnection(system, owner).await()
-    this
-  }
+  def waitForConnection = Amqp.waitForConnection(system, owner)
 
   def stop = system.stop(owner)
 
@@ -109,16 +104,22 @@ class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: St
     Await.result(future, timeout.duration)
   }
 
+  def createChannelOwner(channelParams: Option[ChannelParameters] = None) = createChild(Props(new ChannelOwner(channelParams)))
+
+  def createConsumer(bindings: List[Binding], listener: ActorRef, channelParams: Option[ChannelParameters], autoack: Boolean) = {
+    createChild(Props(new Consumer(bindings, Some(listener), channelParams, autoack)))
+  }
+
+  def createConsumer(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, listener: ActorRef, channelParams: Option[ChannelParameters] = None, autoack: Boolean = false) = {
+    createChild(Props(new Consumer(List(Binding(exchange, queue, routingKey)), Some(listener), channelParams, autoack)))
+  }
+
   def createRpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters]) = {
     createChild(Props(new RpcServer(bindings, processor, channelParams)), None)
   }
 
-  def createRpcServer(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters]) = {
-    createChild(Props(new RpcServer(List(Binding(exchange, queue, routingKey, false)), processor, channelParams)), None)
-  }
-
-  def createRpcServer(queue: QueueParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = Some(ChannelParameters(qos = 1))) = {
-    createChild(Props(new RpcServer(List(Binding(ExchangeParameters("amq.direct", true, "direct", true, false), queue, routingKey, false)), processor, channelParams)), None)
+  def createRpcServer(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters]) = {
+    createChild(Props(new RpcServer(List(Binding(exchange, queue, routingKey)), processor, channelParams)), None)
   }
 
   def createRpcClient() = {
@@ -141,9 +142,8 @@ class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: St
  * @param connFactory connection factory
  * @param reconnectionDelay delay between reconnection attempts
  */
-class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteDuration = 10000.millis) extends Actor with FSM[ConnectionOwner.State, ConnectionOwner.Data] {
+class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteDuration = 10000 millis) extends Actor with FSM[ConnectionOwner.State, ConnectionOwner.Data] {
   import ConnectionOwner._
-
   startWith(Disconnected, Uninitialized)
 
   /**

@@ -57,6 +57,13 @@ object Amqp {
       channel.exchangeDeclare(e.name, e.exchangeType, e.durable, e.autodelete, e.args)
   }
 
+  object StandardExchanges {
+    val amqDirect = ExchangeParameters("amq.direct", passive = true, exchangeType = "direct")
+    val amqFanout = ExchangeParameters("amq.fanout", passive = true, exchangeType = "fanout")
+    val amqTopic = ExchangeParameters("amq.topic", passive = true, exchangeType = "topic")
+    val amqHeaders = ExchangeParameters("amq.headers", passive = true, exchangeType = "headers")
+    val amqMatch = ExchangeParameters("amq.match", passive = true, exchangeType = "headers")
+  }
 
   /**
    * Channel parameters
@@ -66,6 +73,8 @@ object Amqp {
    *            a shared queue.
    */
   case class ChannelParameters(qos: Int)
+
+  case class Binding(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String)
 
   /**
    * requests that can be sent to a ChannelOwner actor
@@ -86,8 +95,6 @@ object Amqp {
   case class QueueBind(queue: String, exchange: String, routing_key: String, args: Map[String, AnyRef] = Map.empty) extends Request
 
   case class QueueUnbind(queue: String, exchange: String, routing_key: String, args: Map[String, AnyRef] = Map.empty) extends Request
-
-  case class Binding(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, autoack: Boolean) extends Request
 
   case class Publish(exchange: String, key: String, body: Array[Byte], properties: Option[BasicProperties] = None, mandatory: Boolean = true, immediate: Boolean = false) extends Request
 

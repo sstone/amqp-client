@@ -4,9 +4,9 @@ import collection.JavaConversions._
 import com.rabbitmq.client.AMQP.BasicProperties
 import com.rabbitmq.client._
 import akka.actor.{Actor, FSM}
-import ConnectionOwner.Shutdown
-import Amqp._
 import java.io.IOException
+import com.github.sstone.amqp.ConnectionOwner.Shutdown
+import com.github.sstone.amqp.Amqp._
 
 object ChannelOwner {
 
