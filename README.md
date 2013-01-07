@@ -27,26 +27,22 @@ So it kind of works and will be maintained for some time :-)
 
 ```xml
 <repositories>
-  <repository>
-    <id>sstone snapshots</id>
-    <url>http://sstone.github.com/sstone-mvn-repo/snapshots</url>
-  </repository>
-  <repository>
-    <id>sstone releases</id>
-    <url>http://sstone.github.com/sstone-mvn-repo/releases</url>
-  </repository>
+    <repository>
+        <id>sonatype snapshots</id>
+        <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
+    </repository>
 </repositories>
 
 <dependencies>
   <dependency>
-    <groupId>com.aphelia</groupId>
+    <groupId>com.github.sstone</groupId>
     <artifactId>amqp-client_2.9.2</artifactId>
     <version>1.1-SNAPSHOT</version>
   </dependency>
   <dependency>
     <groupId>com.typesafe.akka</groupId>
     <artifactId>akka-actor</artifactId>
-    <version>2.0.3</version>
+    <version>2.0.5</version>
   </dependency>
 </dependencies>
 ```
@@ -54,7 +50,18 @@ So it kind of works and will be maintained for some time :-)
 Please note that the Akka dependency is now in the "provided" scope which means that you'll have to define it explicitely in your
 maven/sbt projects. 
 
-The latest snapshot (development) version is 1.1-SNAPSHOT, the latest released version is 1.0
+The latest snapshot (development) version is 1.1-SNAPSHOT, the latest released version is 1.1-RC1
+
+* amqp-client 1.1-RC1 is compatible with Scala 2.9.2 and Akka 2.0.5
+* amqp-client 1.1-SNAPSHOT is compatible with Scala 2.10.0 and Akka 2.1.0
+
+Version 1.0 was package with groupdId set to com.aphelia and uploaded to my own mvn repository (http://sstone.github.com/sstone-mvn-repo/{snapshots/releases}).
+From version 1.1 on, snapshots are uploaded to https://oss.sonatype.org/content/repositories/snapshots and releases are synced to maven central.
+
+## Compatibility with Scala 2.10
+
+Master is currently developped against 2.9.2, branch scala2.10 against 2.10.0
+
 
 ## Library design
 
