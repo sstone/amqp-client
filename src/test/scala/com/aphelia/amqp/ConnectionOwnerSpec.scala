@@ -12,7 +12,8 @@ class ConnectionOwnerSpec extends BasicAmqpTestSpec {
 
   "ConnectionOwner" should {
     "provide a working userfriendly constructor" in {
-      val conn = new RabbitMQConnection(vhost = "/", name = "conn").start
+      val conn = new RabbitMQConnection(vhost = "/", name = "conn")
+      conn.waitForConnection.await()
       val p = TestProbe()
       p.send(conn.owner, CreateChannel)
       p.expectMsgClass(2.second, classOf[Channel])

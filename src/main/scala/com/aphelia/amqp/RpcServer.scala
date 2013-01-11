@@ -47,10 +47,10 @@ object RpcServer {
  * @param processor [[com.aphelia.amqp.RpcServer.IProcessor]] implementation
  * @param channelParams optional channel parameters
  */
-class RpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None) extends Consumer(bindings, None, channelParams) {
+class RpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None) extends Consumer(bindings, None, channelParams, autoack = false) {
 
   def this(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None)
-  = this(List(Binding(exchange, queue, routingKey, false)), processor, channelParams)
+  = this(List(Binding(exchange, queue, routingKey)), processor, channelParams)
 
   import RpcServer._
 

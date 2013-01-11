@@ -91,7 +91,11 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "", passive = false, exclusive = true)
       val probe = TestProbe()
+<<<<<<< HEAD
       val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", true)), probe.ref)), 5000.millis)
+=======
+      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key")), Some(probe.ref), autoack = true)), 5000 millis)
+>>>>>>> 2730fef5765d29ef14cab7b7a8a4133292fbe766
       val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
       waitForConnection(system, conn, consumer, producer).await()
       val message = "yo!".getBytes
@@ -108,7 +112,11 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "queue", passive = false, exclusive = false)
       val probe = TestProbe()
+<<<<<<< HEAD
       val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", autoack = true)), probe.ref)), 5000.millis)
+=======
+      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key")), probe.ref)), 5000 millis)
+>>>>>>> 2730fef5765d29ef14cab7b7a8a4133292fbe766
       val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
       waitForConnection(system, conn, consumer, producer).await()
       val message = "yo!".getBytes
@@ -123,7 +131,11 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "my_queue", passive = false)
       val probe = TestProbe()
+<<<<<<< HEAD
       val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key", autoack = true)), probe.ref)), 5000.millis)
+=======
+      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key")), Some(probe.ref), autoack = true)), 5000 millis)
+>>>>>>> 2730fef5765d29ef14cab7b7a8a4133292fbe766
       val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
       waitForConnection(system, conn, consumer, producer).await()
       val message = "yo!".getBytes
@@ -189,17 +201,8 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       Await.result(f2, 1.minute)
       system.stop(conn)
     }
-    "use amq.direct as default exchange" in {
-      checkConnection
-      val conn = new RabbitMQConnection(vhost = "/", name = "conn").start
-      val latch = new CountDownLatch(2)
-      val proc = new RpcServer.IProcessor() {
-        def process(delivery: Delivery) = {
-          println("received 1 message")
-          latch.countDown()
-          ProcessResult(Some(delivery.body))
-        }
 
+<<<<<<< HEAD
         def onFailure(delivery: Delivery, e: Exception) = ProcessResult(Some(e.toString.getBytes))
       }
       val server = conn.createRpcServer(QueueParameters(name = "my_queue", passive = false), "my_key", proc)
@@ -211,6 +214,8 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       assert(latch.getCount == 0)
       conn.stop
     }
+=======
+>>>>>>> 2730fef5765d29ef14cab7b7a8a4133292fbe766
     "manage custom AMQP properties" in {
       checkConnection
       val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))

@@ -103,6 +103,7 @@ object ConnectionOwner {
  * @param reconnectionDelay
  * @param system
  */
+<<<<<<< HEAD
 class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: String = "/", user: String = "guest", password: String = "guest", name: String, reconnectionDelay: FiniteDuration = 10000.millis, system: ActorSystem = ActorSystem("amqp-system")) {
 
   lazy val owner = system.actorOf(Props(new ConnectionOwner(buildConnFactory(host = host, port = port, vhost = vhost, user = user, password = password), reconnectionDelay)), name = name)
@@ -111,6 +112,13 @@ class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: St
     Amqp.waitForConnection(system, owner).await()
     this
   }
+=======
+class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: String = "/", user: String = "guest", password: String = "guest", name: String, reconnectionDelay: Duration = 10000 millis)(implicit system: ActorSystem) {
+
+  lazy val owner = system.actorOf(Props(new ConnectionOwner(buildConnFactory(host = host, port = port, vhost = vhost, user = user, password = password), reconnectionDelay)), name = name)
+
+  def waitForConnection = Amqp.waitForConnection(system, owner)
+>>>>>>> 2730fef5765d29ef14cab7b7a8a4133292fbe766
 
   def stop = system.stop(owner)
 
@@ -119,16 +127,22 @@ class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: St
     Await.result(future, timeout.duration)
   }
 
+  def createChannelOwner(channelParams: Option[ChannelParameters] = None) = createChild(Props(new ChannelOwner(channelParams)))
+
+  def createConsumer(bindings: List[Binding], listener: ActorRef, channelParams: Option[ChannelParameters], autoack: Boolean) = {
+    createChild(Props(new Consumer(bindings, Some(listener), channelParams, autoack)))
+  }
+
+  def createConsumer(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, listener: ActorRef, channelParams: Option[ChannelParameters] = None, autoack: Boolean = false) = {
+    createChild(Props(new Consumer(List(Binding(exchange, queue, routingKey)), Some(listener), channelParams, autoack)))
+  }
+
   def createRpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters]) = {
     createChild(Props(new RpcServer(bindings, processor, channelParams)), None)
   }
 
-  def createRpcServer(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters]) = {
-    createChild(Props(new RpcServer(List(Binding(exchange, queue, routingKey, false)), processor, channelParams)), None)
-  }
-
-  def createRpcServer(queue: QueueParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = Some(ChannelParameters(qos = 1))) = {
-    createChild(Props(new RpcServer(List(Binding(ExchangeParameters("amq.direct", true, "direct", true, false), queue, routingKey, false)), processor, channelParams)), None)
+  def createRpcServer(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters]) = {
+    createChild(Props(new RpcServer(List(Binding(exchange, queue, routingKey)), processor, channelParams)), None)
   }
 
   def createRpcClient() = {
