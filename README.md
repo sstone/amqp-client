@@ -54,7 +54,7 @@ maven/sbt projects.
 The latest snapshot (development) version is 1.1-SNAPSHOT, the latest released version is 1.1-RC1. They are both compatible with
 Akka 2.1.0/Scala 2.10 and Akka 2.0.5/Scala 2.9.2
 
-Version 1.0 was package with groupdId set to com.aphelia and uploaded to my own mvn repository (http://sstone.github.com/sstone-mvn-repo/{snapshots/releases}).
+Version 1.0 was packaged with groupdId set to com.aphelia and uploaded to my own mvn repository (http://sstone.github.com/sstone-mvn-repo/{snapshots/releases}).
 From version 1.1 on, snapshots are uploaded to https://oss.sonatype.org/content/repositories/snapshots and releases are synced to maven central.
 
 ## Compatibility with Scala 2.10
