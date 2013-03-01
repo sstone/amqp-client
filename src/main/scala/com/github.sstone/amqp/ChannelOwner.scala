@@ -22,14 +22,10 @@ object ChannelOwner {
 
   private[amqp] case class Connected(channel: com.rabbitmq.client.Channel) extends Data
 
-  def withChannel[T](channel: Channel, request: Request)(f: Channel => T) = {
-    try {
-      f(channel)
-    }
-    catch {
+  def withChannel[T](channel: Channel, request: Request)(f: Channel => T) =
+    try f(channel) catch {
       case e: IOException => Amqp.Error(request, e)
     }
-  }
 }
 
 

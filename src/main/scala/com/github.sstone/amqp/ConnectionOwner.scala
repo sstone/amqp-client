@@ -13,19 +13,14 @@ import Amqp._
 object ConnectionOwner {
 
   sealed trait State
-
   case object Disconnected extends State
-
   case object Connected extends State
 
   private[amqp] sealed trait Data
-
   private[amqp] case object Uninitialized extends Data
-
   private[amqp] case class Connected(conn: Connection) extends Data
 
   private[amqp] case class CreateChannel()
-
   private[amqp] case class Shutdown(cause: ShutdownSignalException)
 
   case class Create(props: Props, name: Option[String] = None)

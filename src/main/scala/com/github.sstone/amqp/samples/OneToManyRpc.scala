@@ -1,7 +1,7 @@
 package com.github.sstone.amqp.samples
 
 import akka.pattern.ask
-import akka.actor.{Actor, Props, ActorSystem}
+import akka.actor.ActorSystem
 import com.github.sstone.amqp.{RpcClient, Amqp, RabbitMQConnection}
 import com.github.sstone.amqp.Amqp._
 import com.github.sstone.amqp.RpcServer.{ProcessResult, IProcessor}

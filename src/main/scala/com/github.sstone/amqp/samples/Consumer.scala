@@ -2,7 +2,7 @@ package com.github.sstone.amqp.samples
 
 import akka.actor.{Props, Actor, ActorSystem}
 import com.github.sstone.amqp.{Amqp, RabbitMQConnection}
-import com.github.sstone.amqp.Amqp.{QueueParameters, Ack, Delivery, Publish}
+import com.github.sstone.amqp.Amqp.{QueueParameters, Ack, Delivery}
 
 object Consumer extends App {
   implicit val system = ActorSystem("mySystem")
