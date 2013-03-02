@@ -1,4 +1,4 @@
-# Simple Scala AMQP client
+# Simple Scala AMQP client [![Build Status](https://secure.travis-ci.org/sstone/amqp-client.png)](http://travis-ci.org/sstone/amqp-client)
 
 Simple [AMQP](http://www.amqp.org/) client in Scala/Akka based on the [RabbitMQ](http://www.rabbitmq.com/) java client.
 

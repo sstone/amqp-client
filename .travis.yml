@@ -1,0 +1,5 @@
+language: scala
+services:
+  - rabbitmq
+scala:
+  - "2.9.2"
