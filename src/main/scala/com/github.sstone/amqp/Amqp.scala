@@ -2,7 +2,7 @@ package com.github.sstone.amqp
 
 import collection.JavaConversions._
 import com.rabbitmq.client.AMQP.BasicProperties
-import com.rabbitmq.client.{Channel, Envelope}
+import com.rabbitmq.client.{Method, Channel, Envelope}
 import akka.actor.{Actor, Props, ActorRef, ActorSystem}
 import akka.actor.FSM.{SubscribeTransitionCallBack, CurrentState, Transition}
 import java.util.concurrent.CountDownLatch
@@ -42,7 +42,12 @@ object Amqp {
    * @param autodelete if true, the exchange will be destroyed when it is no longer used
    * @param args additional arguments
    */
-  case class ExchangeParameters(name: String, passive: Boolean, exchangeType: String, durable: Boolean = false, autodelete: Boolean = false, args: Map[String, AnyRef] = Map.empty)
+  case class ExchangeParameters(name: String,
+                                passive: Boolean,
+                                exchangeType: String,
+                                durable: Boolean = false,
+                                autodelete: Boolean = false,
+                                args: Map[String, AnyRef] = Map())
 
   /**
    * declare an exchange
@@ -79,29 +84,17 @@ object Amqp {
   /**
    * requests that can be sent to a ChannelOwner actor
    */
-
   sealed trait Request
-
   case class DeclareQueue(queue: QueueParameters) extends Request
-
   case class DeleteQueue(name: String, ifUnused: Boolean = false, ifEmpty: Boolean = false) extends Request
-
   case class PurgeQueue(name: String) extends Request
-
   case class DeclareExchange(exchange: ExchangeParameters) extends Request
-
   case class DeleteExchange(name: String, ifUnused: Boolean = false) extends Request
-
   case class QueueBind(queue: String, exchange: String, routing_key: String, args: Map[String, AnyRef] = Map.empty) extends Request
-
   case class QueueUnbind(queue: String, exchange: String, routing_key: String, args: Map[String, AnyRef] = Map.empty) extends Request
-
   case class Publish(exchange: String, key: String, body: Array[Byte], properties: Option[BasicProperties] = None, mandatory: Boolean = true, immediate: Boolean = false) extends Request
-
   case class Ack(deliveryTag: Long) extends Request
-
   case class Reject(deliveryTag: Long, requeue: Boolean = true)  extends Request
-
   case class Transaction(publish: List[Publish]) extends Request
 
   /**
@@ -113,14 +106,14 @@ object Amqp {
    *               For example:
    *
    */
-  case class Ok(request:Request, result:Option[AnyRef] = None)
+  case class Ok(request: Request, result: Option[Method] = None)
 
   /**
    * sent back by a publisher when the request was not processed successfully
    * @param request original request
    * @param reason whatever error that was thrown when the request was processed
    */
-  case class Error(request:Request, reason:Throwable)
+  case class Error(request: Request, reason: Throwable)
 
 
   /**
@@ -129,7 +122,7 @@ object Amqp {
    * @param envelope AMQP envelope
    * @param properties AMQP properties
    * @param body message body
-   * @see [[com.aphelia.amqp.Consumer]]
+   * @see [[com.github.sstone.amqp.Consumer]]
    */
   case class Delivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte])
 

@@ -5,7 +5,7 @@ import org.scalatest.junit.JUnitRunner
 import akka.testkit.TestProbe
 import akka.util.duration._
 import akka.actor.Props
-import java.util.concurrent.{CountDownLatch, TimeUnit, Executors}
+import java.util.concurrent.{TimeUnit, Executors}
 import akka.dispatch.Future
 import akka.dispatch.ExecutionContext
 import com.github.sstone.amqp.RpcClient.{Undelivered, Request, Response}

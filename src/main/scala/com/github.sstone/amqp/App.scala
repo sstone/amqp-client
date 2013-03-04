@@ -6,12 +6,10 @@ import com.rabbitmq.client.ConnectionFactory
 import akka.dispatch.{ExecutionContext, Future, Await}
 import com.github.sstone.amqp.RpcClient.{Response, Request}
 import akka.actor._
-import akka.actor.FSM.{Transition, SubscribeTransitionCallBack}
 import com.github.sstone.amqp.Amqp._
-import java.util.concurrent.{Executors, CountDownLatch}
+import java.util.concurrent.Executors
 import akka.util.Timeout
-import com.rabbitmq.client.AMQP.{BasicProperties, Queue}
-import akka.actor.Status.Failure
+import com.rabbitmq.client.AMQP.BasicProperties
 import RpcServer.ProcessResult
 
 
