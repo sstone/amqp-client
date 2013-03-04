@@ -12,7 +12,7 @@ This client provides a simple API for
 
 It is based on the [Akka](http://akka.io/) 2.0 framework.
 
-## Limitations and compatiblity issues
+## Limitations and compatibility issues
 
 * This client is compatible with AMQP 0.9.1, not AMQP 1.0.
 * This client is most probably not easily usable from Java

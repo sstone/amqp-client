@@ -6,26 +6,16 @@ import com.rabbitmq.client._
 import akka.actor.{Actor, FSM}
 import com.github.sstone.amqp.Amqp._
 import java.io.IOException
-import com.github.sstone.amqp.ConnectionOwner.Shutdown
+import com.github.sstone.amqp.ConnectionOwner.LeaveChannel
 
 object ChannelOwner {
-
   sealed trait State
-
   case object Disconnected extends State
-
   case object Connected extends State
 
   private[amqp] sealed trait Data
-
   private[amqp] case object Uninitialized extends Data
-
-  private[amqp] case class Connected(channel: com.rabbitmq.client.Channel) extends Data
-
-  def withChannel[T](channel: Channel, request: Request)(f: Channel => T) =
-    try f(channel) catch {
-      case e: IOException => Amqp.Error(request, e)
-    }
+  private[amqp] case class Connected(channel: Channel) extends Data
 }
 
 
@@ -34,20 +24,49 @@ object ChannelOwner {
  * basically everything: create queues and bindings, publish messages, consume messages...
  * @param channelParams
  */
-class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Actor with FSM[ChannelOwner.State, ChannelOwner.Data] {
+class ChannelOwner(channelParams: Option[ChannelParameters] = None)
+  extends Actor
+  with FSM[ChannelOwner.State, ChannelOwner.Data] {
 
   import ChannelOwner._
 
   startWith(Disconnected, Uninitialized)
 
-  override def preRestart(reason: Throwable, message: Option[Any]) {
-    log.warning("preRestart {} {}", reason, message)
-    super.preRestart(reason, message)
+  when(Disconnected) {
+    case Event(channel: Channel, _) =>
+      setup(channel)
+      goto(Connected) using Connected(channel)
   }
 
-  override def postRestart(reason: Throwable) {
-    log.warning("preRestart {} {}", reason)
-    super.postRestart(reason)
+  when(Connected) {
+    case Event(channel: Channel, _) =>
+      // we already have a channel, close this one to prevent resource leaks
+      log.warning("closing unexpected channel {}", channel)
+      channel.close()
+      stay
+
+    // sent by the actor's parent when the AMQP connection is lost
+    case Event(LeaveChannel(cause), _) => goto(Disconnected)
+
+    case Event(request: Request, Connected(channel)) =>
+      stay replying (try process(channel, request) catch {
+        case e: IOException => Amqp.Error(request, e)
+      })
+  }
+
+  onTransition {
+    case Disconnected -> Connected => log.info("connected")
+    case Connected -> Disconnected => log.warning("disconnected")
+  }
+
+  onTermination {
+    case StopEvent(_, Connected, Connected(channel)) =>
+      try {
+        log.info("closing channel")
+        channel.close()
+      } catch {
+        case e: Exception => log.warning(e.toString)
+      }
   }
 
   /**
@@ -70,110 +89,78 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
       def shutdownCompleted(cause: ShutdownSignalException) {
         if (!cause.isInitiatedByApplication) {
           log.error(cause, "channel was shut down")
-          self ! Shutdown(cause)
+          self ! LeaveChannel(cause)
         }
       }
     })
     onChannel(channel)
   }
 
-  when(Disconnected) {
-    case Event(channel: Channel, _) => {
-      setup(channel)
-      goto(Connected) using Connected(channel)
-    }
+  override def preRestart(reason: Throwable, message: Option[Any]) {
+    log.warning("preRestart {} {}", reason, message)
+    super.preRestart(reason, message)
   }
 
-  when(Connected) {
-    case Event(channel: Channel, _) => {
-      // we already have a channel, close this one to prevent resource leaks
-      log.warning("closing unexpected channel {}", channel)
-      channel.close()
-      stay
-    }
-    /*
-     * sent by the actor's parent when the AMQP connection is lost
-     */
-    case Event(Shutdown(cause), _) => goto(Disconnected)
-    case Event(request@Publish(exchange, routingKey, body, properties, mandatory, immediate), Connected(channel)) => {
-      val props = properties getOrElse new AMQP.BasicProperties.Builder().build()
-      stay replying withChannel(channel, request)(c => {
-        c.basicPublish(exchange, routingKey, mandatory, immediate, props, body)
-        Ok(request)
-      })
-    }
-    case Event(request@Transaction(publish), Connected(channel)) => {
-      stay replying withChannel(channel, request) {
-        c => {
-          c.txSelect()
-          publish.foreach(p => c.basicPublish(p.exchange, p.key, p.mandatory, p.immediate, new AMQP.BasicProperties.Builder().build(), p.body))
-          c.txCommit()
-          Ok(request)
-        }
-      }
-    }
-    case Event(request@Ack(deliveryTag), Connected(channel)) => {
-      log.debug("acking %d on %s".format(deliveryTag, channel))
-      stay replying withChannel(channel, request)(c => {
-        c.basicAck(deliveryTag, false)
-        Ok(request)
-      })
-    }
-    case Event(request@Reject(deliveryTag, requeue), Connected(channel)) => {
-      log.debug("rejecting %d on %s".format(deliveryTag, channel))
-      stay replying withChannel(channel, request)(c => {
-        c.basicReject(deliveryTag, requeue)
-        Ok(request)
-      })
-    }
-    case Event(request@DeclareExchange(exchange), Connected(channel)) => {
-      log.debug("declaring exchange {}", exchange)
-      stay replying withChannel(channel, request)(c => Ok(request, Some(declareExchange(c, exchange))))
-    }
-    case Event(request@DeleteExchange(exchange, ifUnused), Connected(channel)) => {
-      log.debug("deleting exchange {} ifUnused {}", exchange, ifUnused)
-      stay replying withChannel(channel, request)(c => Ok(request, Some(c.exchangeDelete(exchange, ifUnused))))
-    }
-    case Event(request@DeclareQueue(queue), Connected(channel)) => {
-      log.debug("declaring queue {}", queue)
-      stay replying withChannel(channel, request)(c => Ok(request, Some(declareQueue(c, queue))))
-    }
-    case Event(request@PurgeQueue(queue), Connected(channel)) => {
-      log.debug("purging queue {}", queue)
-      stay replying withChannel(channel, request)(c => Ok(request, Some(c.queuePurge(queue))))
-    }
-    case Event(request@DeleteQueue(queue, ifUnused, ifEmpty), Connected(channel)) => {
-      log.debug("deleting queue {} ifUnused {} ifEmpty {}", queue, ifUnused, ifEmpty)
-      stay replying withChannel(channel, request)(c => Ok(request, Some(c.queueDelete(queue, ifUnused, ifEmpty))))
-    }
-    case Event(request@QueueBind(queue, exchange, routingKey, args), Connected(channel)) => {
-      log.debug("binding queue {} to key {} on exchange {}", queue, routingKey, exchange)
-      stay replying withChannel(channel, request)(c => Ok(request, Some(c.queueBind(queue, exchange, routingKey, args))))
-    }
-    case Event(request@QueueUnbind(queue, exchange, routingKey, args), Connected(channel)) => {
-      log.debug("unbinding queue {} to key {} on exchange {}", queue, routingKey, exchange)
-      stay replying withChannel(channel, request)(c => Ok(request, Some(c.queueUnbind(queue, exchange, routingKey, args))))
-    }
+  override def postRestart(reason: Throwable) {
+    log.warning("preRestart {} {}", reason)
+    super.postRestart(reason)
   }
 
-  onTransition {
-    case Disconnected -> Connected => {
-      log.info("connected")
-    }
-    case Connected -> Disconnected => {
-      log.warning("disconnected")
-    }
-  }
+  def process(channel: Channel, request: Request): Ok = {
+    implicit def unitToOk(x: Unit) = Ok(request)
+    implicit def methodToOk(m: Method) = Ok(request, Some(m))
 
-  onTermination {
-    case StopEvent(_, Connected, Connected(channel)) => {
-      try {
-        log.info("closing channel")
-        channel.close()
-      }
-      catch {
-        case e: Exception => log.warning(e.toString)
-      }
+    request match {
+      case Publish(exchange, routingKey, body, properties, mandatory, immediate) =>
+        val props = properties getOrElse new AMQP.BasicProperties.Builder().build()
+        channel.basicPublish(exchange, routingKey, mandatory, immediate, props, body)
+
+      case Transaction(publish) =>
+        channel.txSelect()
+        publish.foreach(p => channel.basicPublish(
+          p.exchange,
+          p.key,
+          p.mandatory,
+          p.immediate,
+          new AMQP.BasicProperties.Builder().build(),
+          p.body))
+        channel.txCommit()
+
+      case Ack(deliveryTag) =>
+        log.debug("acking %d on %s".format(deliveryTag, channel))
+        channel.basicAck(deliveryTag, false)
+
+      case Reject(deliveryTag, requeue) =>
+        log.debug("rejecting %d on %s".format(deliveryTag, channel))
+        channel.basicReject(deliveryTag, requeue)
+
+      case DeclareExchange(exchange) =>
+        log.debug("declaring exchange {}", exchange)
+        declareExchange(channel, exchange)
+
+      case DeleteExchange(exchange, ifUnused) =>
+        log.debug("deleting exchange {} ifUnused {}", exchange, ifUnused)
+        channel.exchangeDelete(exchange, ifUnused)
+
+      case DeclareQueue(queue) =>
+        log.debug("declaring queue {}", queue)
+        declareQueue(channel, queue)
+
+      case PurgeQueue(queue) =>
+        log.debug("purging queue {}", queue)
+        channel.queuePurge(queue)
+
+      case DeleteQueue(queue, ifUnused, ifEmpty) =>
+        log.debug("deleting queue {} ifUnused {} ifEmpty {}", queue, ifUnused, ifEmpty)
+        channel.queueDelete(queue, ifUnused, ifEmpty)
+
+      case QueueBind(queue, exchange, routingKey, args) =>
+        log.debug("binding queue {} to key {} on exchange {}", queue, routingKey, exchange)
+        channel.queueBind(queue, exchange, routingKey, args)
+
+      case QueueUnbind(queue, exchange, routingKey, args) =>
+        log.debug("unbinding queue {} to key {} on exchange {}", queue, routingKey, exchange)
+        channel.queueUnbind(queue, exchange, routingKey, args)
     }
   }
 }

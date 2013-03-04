@@ -21,9 +21,13 @@ object ConnectionOwner {
   private[amqp] case class Connected(conn: Connection) extends Data
 
   private[amqp] case class CreateChannel()
-  private[amqp] case class Shutdown(cause: ShutdownSignalException)
+  private[amqp] case class LeaveChannel(cause: ShutdownSignalException)
 
   case class Create(props: Props, name: Option[String] = None)
+
+  case object Connect
+  case object Reconnect
+  case object FeedChildren
 
   /** ask a ConnectionOwner to create a "channel owner" actor (producer, consumer, rpc client or server
     * ... or even you own)
@@ -77,14 +81,6 @@ object ConnectionOwner {
 
 /**
  * Helper class that encapsulates a connection owner so that it is easier to manipulate
- * @param host
- * @param port
- * @param vhost
- * @param user
- * @param password
- * @param name
- * @param reconnectionDelay
- * @param system
  */
 class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: String = "/", user: String = "guest", password: String = "guest", name: String, reconnectionDelay: Duration = 10000 millis)(implicit system: ActorSystem) {
   import ConnectionOwner._
@@ -139,7 +135,77 @@ class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: St
  */
 class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: Duration = 10000 millis) extends Actor with FSM[ConnectionOwner.State, ConnectionOwner.Data] {
   import ConnectionOwner._
+
   startWith(Disconnected, Uninitialized)
+
+  when(Disconnected) {
+    case Event(Connect, _) =>
+      try {
+        val conn = connFactory.newConnection()
+        conn.addShutdownListener(new ShutdownListener {
+          def shutdownCompleted(cause: ShutdownSignalException) {
+            self ! LeaveChannel(cause)
+          }
+        })
+        cancelTimer("reconnect")
+        goto(Connected) using Connected(conn)
+      }
+      catch {
+        case e: IOException => {
+          log.error(e, "cannot connect to {}, retrying in {}", connFactory, reconnectionDelay)
+          setTimer("reconnect", Connect, reconnectionDelay, repeat = true)
+        }
+      }
+    // create a "channel aware" actor that will request channels from this connection actor
+    case Event(Create(props, name), _) =>
+      val child = createChild(props, name)
+      log.debug("creating child {} while in disconnected state", child)
+      stay replying child
+
+    // when disconnected, ignore channel request. Another option would to send back something like None...
+    case Event(CreateChannel, _) => stay
+  }
+
+  when(Connected) {
+    // channel request. send back a channel
+    case Event(CreateChannel, Connected(conn)) => stay replying conn.createChannel()
+
+    // create a "channel aware" actor that will request channels from this connection actor
+    case Event(Create(props, name), Connected(conn)) =>
+      val channel = conn.createChannel()
+      val child = createChild(props, name)
+      log.debug("creating child {} with channel {}", child, channel)
+      // send a channel to the child
+      child ! channel
+      stay replying child
+
+    // shutdown event sent by the connection's shutdown listener
+    case Event(LeaveChannel(cause), _) =>
+      if (!cause.isInitiatedByApplication) {
+        log.error(cause.toString)
+        self ! Connect
+        context.children.foreach(_ ! LeaveChannel(cause))
+      }
+      goto(Disconnected) using Uninitialized
+
+    case Event(FeedChildren, Connected(conn)) =>
+      // send a channel to each child actor
+      context.children.foreach(_ ! conn.createChannel())
+      stay
+  }
+
+  onTransition {
+    case Connected -> Disconnected => log.warning("lost connection to " + toUri(connFactory))
+    case Disconnected -> Connected =>
+      log.info("connected to " + toUri(connFactory))
+      self ! FeedChildren
+  }
+
+  onTermination {
+    case StopEvent(_, Connected, Connected(conn)) =>
+      log.info("closing connection to " + toUri(connFactory))
+      conn.close()
+  }
 
   /**
    * ask this connection owner to create a "channel aware" child
@@ -147,100 +213,13 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: Duratio
    * @param name optional actor name
    * @return a new actor
    */
-  private def createChild(props: Props, name: Option[String]) = {
-    // why isn't there an actorOf(props: Props, name: Option[String] = None) ?
-    name match {
-      case None => context.actorOf(props)
-      case Some(actorName) => context.actorOf(props, actorName)
-    }
-  }
-
-  when(Disconnected) {
-    case Event('connect, _) => {
-      try {
-        val conn = connFactory.newConnection()
-        conn.addShutdownListener(new ShutdownListener {
-          def shutdownCompleted(cause: ShutdownSignalException) {
-            self ! Shutdown(cause)
-          }
-        })
-        cancelTimer("reconnect")
-        goto(Connected) using (Connected(conn))
-      }
-      catch {
-        case e: IOException => {
-          log.error(e, "cannot connect to {}, retrying in {}", connFactory, reconnectionDelay)
-          setTimer("reconnect", 'connect, reconnectionDelay, true)
-        }
-      }
-    }
-    /*
-     * create a "channel aware" actor that will request channels from this connection actor
-     */
-    case Event(Create(props, name), _) => {
-      val child = createChild(props, name)
-      log.debug("creating child {} while in disconnected state", child)
-      stay replying child
-    }
-    /*
-     * when disconnected, ignore channel request. Another option would to send back something like None...
-     */
-    case Event(CreateChannel, _) => stay
-  }
-
-  when(Connected) {
-    /*
-     * channel request. send back a channel
-     */
-    case Event(CreateChannel, Connected(conn)) => stay replying conn.createChannel()
-    /*
-     * create a "channel aware" actor that will request channels from this connection actor
-     */
-    case Event(Create(props, name), Connected(conn)) => {
-      val channel = conn.createChannel()
-      val child = createChild(props, name)
-      log.debug("creating child {} with channel {}", child, channel)
-      // send a channel to the kid
-      child ! channel
-      stay replying child
-    }
-    /*
-     * shutdown event sent by the connection's shutdown listener
-     */
-    case Event(Shutdown(cause), _) => {
-      if (!cause.isInitiatedByApplication) {
-        log.error(cause.toString)
-        self ! 'connect
-        context.children.foreach(_ ! Shutdown(cause))
-      }
-      goto(Disconnected) using (Uninitialized)
-    }
-    /*
-     * send a channel to each child actor
-     */
-    case Event('feedTheKids, Connected(conn)) => {
-      context.children.foreach(_ ! conn.createChannel())
-      stay
-    }
-  }
-
-  onTransition {
-    case Disconnected -> Connected => {
-      log.info("connected to " + toUri(connFactory))
-      self ! 'feedTheKids
-    }
-    case Connected -> Disconnected => log.warning("lost connection to " + toUri(connFactory))
-  }
-
-  onTermination {
-    case StopEvent(_, Connected, Connected(conn)) => {
-      log.info("closing connection to " + toUri(connFactory))
-      conn.close()
-    }
+  private def createChild(props: Props, name: Option[String]) = name match {
+    case None => context.actorOf(props)
+    case Some(actorName) => context.actorOf(props, actorName)
   }
 
   override def preStart() {
-    self ! 'connect
+    self ! Connect
   }
 }
 
