@@ -1,110 +1,100 @@
 package com.github.sstone.amqp
 
-import akka.testkit.TestProbe
+import org.junit.runner.RunWith
+import org.specs2.runner.JUnitRunner
+import org.specs2.mutable.{After, Specification}
+import com.rabbitmq.client.ConnectionFactory
+import akka.actor.{ActorSystem, Props}
+import com.github.sstone.amqp.Amqp._
+import java.util.concurrent.{Executors, TimeUnit}
+import concurrent.{ExecutionContext, Future, Await}
 import concurrent.duration._
-import akka.actor.Props
-import java.util.concurrent.{CountDownLatch, TimeUnit, Executors}
-import RpcClient.{Undelivered, Request, Response}
-import Amqp._
-import RpcServer.{ProcessResult, IProcessor}
-import com.rabbitmq.client.AMQP.Queue
-import akka.util.Timeout._
-import akka.pattern.ask
+import akka.testkit.{ImplicitSender, TestProbe, TestKit}
+import akka.pattern.{ask, gracefulStop}
+import org.specs2.time.NoTimeConversions
 import akka.util.Timeout
-import com.rabbitmq.client.AMQP.BasicProperties
-import concurrent.{Future, ExecutionContext, Await}
+import com.rabbitmq.client.AMQP.{BasicProperties, Queue}
+import com.github.sstone.amqp.RpcServer.{IProcessor, ProcessResult}
+import com.github.sstone.amqp.RpcClient.{Undelivered, Response, Request}
+import ExecutionContext.Implicits.global
 
-class ChannelOwnerSpec extends BasicAmqpTestSpec {
-  import ExecutionContext.Implicits.global
+@RunWith(classOf[JUnitRunner])
+class ChannelOwnerSpec extends TestKit(ActorSystem("TestSystem")) with Specification with NoTimeConversions with ImplicitSender {
+  implicit val timeout = Timeout(5 seconds)
+  sequential
+
+  trait TestCtx extends After {
+    val connFactory = new ConnectionFactory()
+    val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
+    val channelOwner = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
+    waitForConnection(system, conn, channelOwner).await(5, TimeUnit.SECONDS)
+
+    def after = {
+      Await.result(gracefulStop(conn, 5 seconds)(system), 6 seconds)
+    }
+  }
 
   "ChannelOwner" should {
-    "transition from Disconnected to Connected when it receives a channel" in {
-      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
-      val instance = ConnectionOwner.createActor(conn, Props(new ChannelOwner()), name = Some("instance"))
-      val latch = waitForConnection(system, instance)
-      latch.await(6000, TimeUnit.MILLISECONDS)
-      latch.getCount mustEqual 0
-      system.stop(instance)
-      system.stop(conn)
+    "implement basic error handling" in new TestCtx {
+      channelOwner ! DeclareQueue(QueueParameters("no_such_queue", passive = true))
+      expectMsgClass(1 second, classOf[Amqp.Error])
     }
-    "allow users to create, bind, purge and delete queues" in {
-      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
-      val instance = ConnectionOwner.createActor(conn, Props(new ChannelOwner()), name = Some("instance"))
-      val latch = waitForConnection(system, conn, instance)
-      latch.await(2, TimeUnit.SECONDS)
+    "allow users to create, bind, purge and delete queues" in new TestCtx {
       val queue = "my_test_queue"
-      implicit val timeout = Timeout(2.seconds)
+
       // declare a queue, bind it to "my_test_key" on "amq.direct" and publish a message
-      instance ! DeclareQueue(QueueParameters(queue, passive = false))
-      instance ! QueueBind(queue, "amq.direct", "my_test_key")
-      instance ! Publish("amq.direct", "my_test_key", "yo!".getBytes)
+      channelOwner ! DeclareQueue(QueueParameters(queue, passive = false, durable = false, autodelete = true))
+      channelOwner ! QueueBind(queue, "amq.direct", "my_test_key")
+      channelOwner ! Publish("amq.direct", "my_test_key", "yo!".getBytes)
+      receiveN(3, 2 seconds)
+
       // check that there is 1 message in the queue
-      val Amqp.Ok(_, Some(check1: Queue.DeclareOk)) = Await.result(
-        instance.ask(DeclareQueue(QueueParameters(queue, passive = true))),
-        1.second)
-      assert(check1.getMessageCount === 1)
+      channelOwner ! DeclareQueue(QueueParameters(queue, passive = true))
+      val Amqp.Ok(_, Some(check1: Queue.DeclareOk)) = receiveOne(1 second)
 
       // purge the queue
-      instance ! PurgeQueue(queue)
+      channelOwner ! PurgeQueue(queue)
+      receiveOne(1 second)
+
       // check that there are no more messages in the queue
-      val Amqp.Ok(_, Some(check2: Queue.DeclareOk)) = Await.result(
-        instance.ask(DeclareQueue(QueueParameters(queue, passive = true))),
-        1.second)
-      assert(check2.getMessageCount === 0)
+      channelOwner ! DeclareQueue(QueueParameters(queue, passive = true))
+      val Amqp.Ok(_, Some(check2: Queue.DeclareOk)) = receiveOne(1 second)
+
       // delete the queue
-      val Amqp.Ok(_, Some(check3: Queue.DeleteOk)) = Await.result(
-        instance.ask(DeleteQueue(queue)),
-        1.second)
-      system.stop(conn)
-    }
-    "implement basic error handling" in {
-      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
-      waitForConnection(system, conn).await(2, TimeUnit.SECONDS)
-      val instance = ConnectionOwner.createActor(conn, Props(new ChannelOwner()), name = Some("instance"))
-      waitForConnection(system, instance).await(2, TimeUnit.SECONDS)
-      implicit val timeout = Timeout(2.seconds)
-      val check1 = Await.result(
-        instance.ask(DeclareQueue(QueueParameters("no_such_queue", passive = true))),
-        1.second)
-      println(check1)
-      (check1.getClass == classOf[Amqp.Error]) mustEqual true
-      system.stop(conn)
+      channelOwner ! DeleteQueue(queue)
+      val Amqp.Ok(_, Some(check3: Queue.DeleteOk)) = receiveOne(1 second)
+
+      assert(check1.getMessageCount === 1)
+      assert(check2.getMessageCount === 0)
     }
   }
 
   "Multiple ChannelOwners" should {
-    "each transition from Disconnected to Connected when they receive a channel" in {
-      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
+    "each transition from Disconnected to Connected when they receive a channel" in new TestCtx {
       val concurrent = 10
       val actors = for (i <- 1 until concurrent) yield ConnectionOwner.createActor(conn, Props(new ChannelOwner()), name = Some(i + "-instance"))
       val latch = waitForConnection(system, actors: _*)
       latch.await(10000, TimeUnit.MILLISECONDS)
       latch.getCount mustEqual 0
-      system.stop(conn)
     }
   }
 
   "Consumers" should {
-    "receive messages sent by producers" in {
-      checkConnection
-      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
+    "receive messages sent by producers" in new TestCtx {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "", passive = false, exclusive = true)
       val probe = TestProbe()
       val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key")), probe.ref)), 5000.millis)
       val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
-      waitForConnection(system, conn, consumer, producer).await()
+      waitForConnection(system, consumer, producer).await()
       val message = "yo!".getBytes
       producer ! Publish(exchange.name, "my_key", message)
       probe.expectMsgClass(1.second, classOf[Delivery])
-      system.stop(conn)
     }
   }
 
   "Producers" should {
-    "be able to specify custom message properties" in {
-      checkConnection
-      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
+    "be able to specify custom message properties" in new TestCtx {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "queue", passive = false, exclusive = false)
       val probe = TestProbe()
@@ -114,12 +104,9 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       val message = "yo!".getBytes
       producer ! Publish(exchange.name, "my_key", message, Some(new BasicProperties.Builder().contentType("my content").build()))
       val delivery = probe.receiveOne(1.second).asInstanceOf[Delivery]
-      assert(delivery.properties.getContentType == "my content")
-      system.stop(conn)
+      assert(delivery.properties.getContentType === "my content")
     }
-    "publish messages within an AMQP transaction" in {
-      checkConnection
-      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
+    "publish messages within an AMQP transaction" in new TestCtx {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "my_queue", passive = false)
       val probe = TestProbe()
@@ -133,14 +120,11 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
         case message: Delivery => received = message :: received
       }
       assert(received.length === 3)
-      system.stop(conn)
     }
   }
 
   "RPC Servers" should {
-    "reply to clients" in {
-      checkConnection
-      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
+    "reply to clients" in new TestCtx {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "my_queue", passive = false)
       val proc = new RpcServer.IProcessor() {
@@ -157,12 +141,11 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       val client1 = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000.millis)
       val client2 = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000.millis)
       waitForConnection(system, conn, server, client1, client2).await()
-      val exec = ExecutionContext.fromExecutorService(Executors.newCachedThreadPool())
 
       val f1 = Future {
         for (i <- 0 to 15) {
           try {
-            val future = client1.ask(Request(Publish("amq.direct", "my_key", i.toString.getBytes) :: Nil, 1))(1000.millis)
+            val future = client1 ? Request(Publish("amq.direct", "my_key", i.toString.getBytes) :: Nil, 1)
             val result = Await.result(future, 1000.millis).asInstanceOf[Response]
             println("result1 " + new String(result.deliveries.head.body))
             Thread.sleep(300)
@@ -171,11 +154,11 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
             case e: Exception => println(e.toString)
           }
         }
-      }(exec)
+      }
       val f2 = Future {
         for (i <- 0 to 15) {
           try {
-            val future = client2.ask(Request(Publish("amq.direct", "my_key", i.toString.getBytes) :: Nil, 1))(1000.millis)
+            val future = client2 ? Request(Publish("amq.direct", "my_key", i.toString.getBytes) :: Nil, 1)
             val result = Await.result(future, 1000.millis).asInstanceOf[Response]
             println("result2 " + new String(result.deliveries.head.body))
             Thread.sleep(300)
@@ -184,15 +167,12 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
             case e: Exception => println(e.toString)
           }
         }
-      }(exec)
+      }
       Await.result(f1, 1.minute)
       Await.result(f2, 1.minute)
-      system.stop(conn)
     }
 
-    "manage custom AMQP properties" in {
-      checkConnection
-      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
+    "manage custom AMQP properties" in new TestCtx {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "my_queue", passive = false)
       val proc = new RpcServer.IProcessor() {
@@ -207,32 +187,27 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
       val client = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000.millis)
       waitForConnection(system, conn, server, client).await()
       val myprops = new BasicProperties.Builder().contentType("my content").contentEncoding("my encoding").build()
-      val future = client.ask(Request(Publish("amq.direct", "my_key", "yo!!".toString.getBytes, Some(myprops)) :: Nil, 1))(1000.millis)
+      val future = client ? Request(Publish("amq.direct", "my_key", "yo!!".getBytes, Some(myprops)) :: Nil, 1)
       val result = Await.result(future, 1000.millis).asInstanceOf[Response]
       val delivery = result.deliveries.head
-      assert(delivery.properties.getContentType == "my content")
-      assert(delivery.properties.getContentEncoding == "my encoding")
+      assert(delivery.properties.getContentType === "my content")
+      assert(delivery.properties.getContentEncoding === "my encoding")
     }
   }
 
   "RPC Clients" should {
-    "correctly handle returned message" in {
-      checkConnection
-      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
+    "correctly handle returned message" in new TestCtx {
       val client = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000.millis)
       waitForConnection(system, conn, client)
-      implicit val timeout = Timeout(10.seconds) // needed for `?` below
 
-      val future = client.ask(Request(Publish("", "mykey", "yo!".getBytes) :: Nil, 1))(1000.millis)
+      val future = client ? Request(Publish("", "mykey", "yo!".getBytes) :: Nil, 1)
       val result = Await.result(future, 1000.millis)
       assert(result.isInstanceOf[Undelivered])
     }
   }
 
   "RPC Clients and Servers" should {
-    "implement 1 request/several responses patterns" in {
-      checkConnection
-      val conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
+    "implement 1 request/several responses patterns" in new TestCtx {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       // empty means that a random name will be generated when the queue is declared
       val queue = QueueParameters(name = "", passive = false, exclusive = true)
@@ -252,13 +227,12 @@ class ChannelOwnerSpec extends BasicAmqpTestSpec {
 
       val client = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000.millis)
       waitForConnection(system, conn, server1, server2, client)
-      val future = client.ask(Request(Publish(exchange.name, "mykey", "yo!".getBytes) :: Nil, 2))(2000.millis)
+      val future = client ? Request(Publish(exchange.name, "mykey", "yo!".getBytes) :: Nil, 2)
       val result = Await.result(future, 2000.millis).asInstanceOf[Response]
-      assert(result.deliveries.length == 2)
+      assert(result.deliveries.length === 2)
       // we're supposed to have received to answers, "proc1" and "proc2"
       val strings = result.deliveries.map(d => new String(d.body))
-      assert(strings.sorted == List("proc1", "proc2"))
-      system.stop(conn)
+      assert(strings.sorted === List("proc1", "proc2"))
     }
   }
 }
