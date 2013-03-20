@@ -15,8 +15,8 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <scala.version>2.10</scala.version>
-        <akka.version>2.1.0</akka.version>
+        <scala.version>2.10.1</scala.version>
+        <akka.version>2.1.2</akka.version>
     </properties>
 
     <licenses>
@@ -45,7 +45,7 @@
             <plugin>
                 <groupId>net.alchim31.maven</groupId>
                 <artifactId>scala-maven-plugin</artifactId>
-                <version>3.1.0</version>
+                <version>3.1.3</version>
             </plugin>
         </plugins>
     </reporting>
@@ -75,7 +75,7 @@
                         <plugin>
                             <groupId>net.alchim31.maven</groupId>
                             <artifactId>scala-maven-plugin</artifactId>
-                            <version>3.1.0</version>
+                            <version>3.1.3</version>
                             <configuration>
                                 <jvmArgs>
                                     <jvmArg>-Xms64m</jvmArg>
@@ -102,7 +102,7 @@
             <plugin>
                 <groupId>net.alchim31.maven</groupId>
                 <artifactId>scala-maven-plugin</artifactId>
-                <version>3.1.0</version>
+                <version>3.1.3</version>
                 <executions>
                     <execution>
                         <id>process-resources</id>
@@ -155,17 +155,17 @@
         <dependency>
             <groupId>com.rabbitmq</groupId>
             <artifactId>amqp-client</artifactId>
-            <version>3.0.1</version>
+            <version>3.0.4</version>
         </dependency>
         <dependency>
             <groupId>com.typesafe.akka</groupId>
-            <artifactId>akka-actor_${scala.version}</artifactId>
+            <artifactId>akka-actor_2.10</artifactId>
             <version>${akka.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>com.typesafe.akka</groupId>
-            <artifactId>akka-slf4j_${scala.version}</artifactId>
+            <artifactId>akka-slf4j_2.10</artifactId>
             <version>${akka.version}</version>
             <scope>test</scope>
         </dependency>
@@ -177,13 +177,13 @@
         </dependency>
         <dependency>
             <groupId>com.typesafe.akka</groupId>
-            <artifactId>akka-testkit_${scala.version}</artifactId>
+            <artifactId>akka-testkit_2.10</artifactId>
             <version>${akka.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.specs2</groupId>
-            <artifactId>specs2_${scala.version}</artifactId>
+            <artifactId>specs2_2.10</artifactId>
             <version>1.13</version>
             <scope>test</scope>
         </dependency>
