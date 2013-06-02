@@ -1,4 +1,5 @@
 language: scala
+script: mvn test
 scala:
   - 2.10.0
 jdk:
