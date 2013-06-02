@@ -27,8 +27,8 @@ object Consumer extends App {
   // wait till everyone is actually connected to the broker
   Amqp.waitForConnection(system, consumer).await()
 
-  // wait 10 seconds and shut down
   // run the Producer sample now and see what happens
-  Thread.sleep(10000)
+  println("press enter...")
+  System.in.read()
   system.shutdown()
 }

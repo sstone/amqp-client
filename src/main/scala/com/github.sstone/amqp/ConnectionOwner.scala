@@ -220,19 +220,15 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteD
       }
       goto(Disconnected) using (Uninitialized)
     }
-    /*
-     * send a channel to each child actor
-     */
-    case Event('feedTheKids, Connected(conn)) => {
-      context.children.foreach(_ ! conn.createChannel())
-      stay
-    }
   }
 
   onTransition {
     case Disconnected -> Connected => {
       log.info("connected to " + toUri(connFactory))
-      self ! 'feedTheKids
+      nextStateData match {
+        case Connected(conn) => context.children.foreach(_ ! conn.createChannel())
+        case _ => {}
+      }
     }
     case Connected -> Disconnected => log.warning("lost connection to " + toUri(connFactory))
   }

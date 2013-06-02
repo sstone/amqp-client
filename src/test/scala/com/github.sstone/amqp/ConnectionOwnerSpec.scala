@@ -1,30 +1,21 @@
 package com.github.sstone.amqp
 
+import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.WordSpec
+import org.junit.runner.RunWith
+import org.scalatest.junit.JUnitRunner
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
-import akka.actor.{ActorSystem, Props}
-import concurrent.duration._
-import ConnectionOwner.CreateChannel
-import com.rabbitmq.client.Channel
-import Amqp._
-import org.specs2.mutable.Specification
-import org.specs2.time.NoTimeConversions
+import akka.actor.ActorSystem
+import akka.pattern.gracefulStop
 import akka.util.Timeout
-import java.util.concurrent.TimeUnit
+import concurrent.duration._
+import concurrent.Await
+import com.rabbitmq.client.Channel
+import ConnectionOwner.CreateChannel
 
-class ConnectionOwnerSpec extends TestKit(ActorSystem("TestSystem")) with Specification with NoTimeConversions with ImplicitSender {
+@RunWith(classOf[JUnitRunner])
+class ConnectionOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec with ShouldMatchers with ImplicitSender {
   implicit val timeout = Timeout(5 seconds)
-  sequential
-
-  "ConnectionOwner" should {
-    "provide a working userfriendly constructor" in {
-      val conn = new RabbitMQConnection(vhost = "/", name = "conn")
-      conn.waitForConnection.await(5, TimeUnit.SECONDS)
-      val p = TestProbe()
-      p.send(conn.owner, CreateChannel)
-      p.expectMsgClass(2.second, classOf[Channel])
-      conn.stop
-    }
-  }
 
   "ConnectionOwner" should {
     "provide channels for many child actors" in {
@@ -36,7 +27,7 @@ class ConnectionOwnerSpec extends TestKit(ActorSystem("TestSystem")) with Specif
         p.send(conn.owner, CreateChannel)
         p.expectMsgClass(2.second, classOf[Channel])
       }
-      conn.stop
+      Await.result(gracefulStop(conn.owner, 5 seconds)(system), 6 seconds)
     }
   }
 }

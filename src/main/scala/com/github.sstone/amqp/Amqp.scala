@@ -113,7 +113,7 @@ object Amqp {
    *               For example:
    *
    */
-  case class Ok(request:Request, result:Option[AnyRef] = None)
+  case class Ok(request:Request, result:Option[Any] = None)
 
   /**
    * sent back by a publisher when the request was not processed successfully

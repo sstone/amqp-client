@@ -55,7 +55,6 @@ object OneToAnyRpc extends App {
     }
   }
   // wait 10 seconds and shut down
-  // run the Producer sample now and see what happens
   Thread.sleep(10000)
   system.shutdown()
 }
