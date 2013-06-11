@@ -7,9 +7,7 @@ import com.rabbitmq.client.AMQP.BasicProperties
 
 
 /**
- * Create an AMQP consumer, which takes a list of AMQimport com.github.sstone.amqp.ChannelOwner
-import com.github.sstone.amqp.Amqp
-P bindings, a listener to forward messages to, and optional channel parameters.
+ * Create an AMQP consumer, which takes a list of AMQP bindings, a listener to forward messages to, and optional channel parameters.
  * For each (Exchange, Queue, RoutingKey) biding, the consumer will:
  * <ul>
  *   <li>declare the exchange</li>

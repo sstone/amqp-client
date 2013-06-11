@@ -10,10 +10,7 @@ import util.{Failure, Success}
 object RpcServer {
 
   /**
-   * represents the response to a RPimport com.github.sstone.amqp.ChannelOwner
-import com.github.sstone.amqp.Amqp
-import com.github.sstone.amqp.Consumer
-C request
+   * represents the response to a RPC request
    * @param value optional response message body; if None, nothing will be sent back ("fire and forget" pattern)
    * @param properties optional response message properties
    */
