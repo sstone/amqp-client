@@ -2,8 +2,9 @@ package com.github.sstone.amqp
 
 import Amqp._
 import akka.actor.ActorRef
-import com.rabbitmq.client.{Envelope, Channel, DefaultConsumer}
+import com.rabbitmq.client.{Channel, DefaultConsumer, Envelope}
 import com.rabbitmq.client.AMQP.BasicProperties
+
 
 /**
  * Create an AMQP consumer, which takes a list of AMQP bindings, a listener to forward messages to, and optional channel parameters.
@@ -29,8 +30,10 @@ class Consumer(bindings: List[Binding], listener: Option[ActorRef], channelParam
   private def setupBinding(consumer: DefaultConsumer, binding: Binding) = {
     val channel = consumer.getChannel
     val queueName = declareQueue(channel, binding.queue).getQueue
-    declareExchange(channel, binding.exchange)
-    channel.queueBind(queueName, binding.exchange.name, binding.routingKey)
+    if(!"".equals(binding.exchange.name)) {
+    	declareExchange(channel, binding.exchange)
+    	channel.queueBind(queueName, binding.exchange.name, binding.routingKey)
+    }
     channel.basicConsume(queueName, autoack, consumer)
   }
 

@@ -6,6 +6,7 @@ import com.rabbitmq.client.{Envelope, Channel}
 import concurrent.{ExecutionContext, Future}
 import util.{Failure, Success}
 
+
 object RpcServer {
 
   /**

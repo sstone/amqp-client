@@ -1,13 +1,19 @@
 package com.github.sstone.amqp
 
-import collection.JavaConversions._
-import com.rabbitmq.client.AMQP.BasicProperties
-import com.rabbitmq.client._
-import akka.actor.{Actor, FSM}
-import java.io.IOException
-import com.github.sstone.amqp.ConnectionOwner.Shutdown
+import scala.collection.JavaConversions._
+import scala.util.Failure
+import scala.util.Success
+import scala.util.Try
+
 import com.github.sstone.amqp.Amqp._
-import scala.util.{Try, Failure, Success}
+import com.github.sstone.amqp.ConnectionOwner._
+import com.rabbitmq.client._
+import com.rabbitmq.client.AMQP.BasicProperties
+
+import akka.actor.Actor
+import akka.actor.FSM
+import akka.actor.actorRef2Scala
+
 
 object ChannelOwner {
 

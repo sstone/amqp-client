@@ -1,5 +1,4 @@
 package com.github.sstone.amqp
-
 import akka.pattern.ask
 import com.rabbitmq.client.ConnectionFactory
 import com.github.sstone.amqp.RpcClient.{Response, Request}

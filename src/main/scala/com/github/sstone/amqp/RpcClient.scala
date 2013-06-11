@@ -4,6 +4,8 @@ import akka.actor.ActorRef
 import Amqp._
 import com.rabbitmq.client.{Envelope, Channel, DefaultConsumer}
 import com.rabbitmq.client.AMQP.BasicProperties
+import akka.actor.actorRef2Scala
+
 
 object RpcClient {
 

@@ -1,11 +1,11 @@
 package com.github.sstone.amqp
-
 import collection.JavaConversions._
 import com.rabbitmq.client.AMQP.BasicProperties
 import com.rabbitmq.client.{Channel, Envelope}
 import akka.actor.{Actor, Props, ActorRef, ActorSystem}
 import akka.actor.FSM.{SubscribeTransitionCallBack, CurrentState, Transition}
 import java.util.concurrent.CountDownLatch
+import akka.actor.actorRef2Scala
 
 object Amqp {
 
@@ -58,6 +58,7 @@ object Amqp {
   }
 
   object StandardExchanges {
+    val amqDefault = ExchangeParameters("", passive = true, exchangeType = "direct")
     val amqDirect = ExchangeParameters("amq.direct", passive = true, exchangeType = "direct")
     val amqFanout = ExchangeParameters("amq.fanout", passive = true, exchangeType = "fanout")
     val amqTopic = ExchangeParameters("amq.topic", passive = true, exchangeType = "topic")
