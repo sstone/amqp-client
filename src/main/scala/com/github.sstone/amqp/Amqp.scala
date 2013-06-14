@@ -3,7 +3,7 @@ package com.github.sstone.amqp
 import collection.JavaConversions._
 import com.rabbitmq.client.AMQP.BasicProperties
 import com.rabbitmq.client.{Channel, Envelope}
-import akka.actor.{Actor, Props, ActorRef, ActorSystem}
+import akka.actor.{Actor, Props, ActorRef, ActorRefFactory}
 import akka.actor.FSM.{SubscribeTransitionCallBack, CurrentState, Transition}
 import java.util.concurrent.CountDownLatch
 
@@ -146,12 +146,12 @@ object Amqp {
    * </ul>
    * this is a simple wrapper around the FSM state monitoring tools provided by Akka, since ConnectionOwner and ChannelOwner
    * are state machines with 2 states (Disconnected and Connected)
-   * @param system actor system (will be used to create a temporary watcher)
+   * @param actorRefFactory actor capable of creating child actors (will be used to create a temporary watcher)
    * @param channelOrConnectionActor reference to a ConnectionOwner or ChannelOwner actor
    * @param onConnected connection callback
    */
-  def onConnection(system: ActorSystem, channelOrConnectionActor: ActorRef, onConnected: () => Unit) = {
-    val m = system.actorOf(Props(new Actor {
+  def onConnection(actorRefFactory: ActorRefFactory, channelOrConnectionActor: ActorRef, onConnected: () => Unit) = {
+    val m = actorRefFactory.actorOf(Props(new Actor {
       def receive = {
         case Transition(_, ChannelOwner.Disconnected, ChannelOwner.Connected)
              | Transition(_, ConnectionOwner.Disconnected, ConnectionOwner.Connected)
@@ -167,13 +167,13 @@ object Amqp {
 
   /**
    * wait until a number of connection or channel actors are connected
-   * @param system actor system (will be used to create temporary watchers)
+   * @param actorRefFactory an actor capable of creating child actors (will be used to create temporary watchers)
    * @param actors set of reference to ConnectionOwner or ChannelOwner actors
    * @return a CountDownLatch object you can wait on; its count will reach 0 when all actors are connected
    */
-  def waitForConnection(system: ActorSystem, actors: ActorRef*): CountDownLatch = {
+  def waitForConnection(actorRefFactory: ActorRefFactory, actors: ActorRef*): CountDownLatch = {
     val latch = new CountDownLatch(actors.size)
-    actors.foreach(onConnection(system, _, () => latch.countDown()))
+    actors.foreach(onConnection(actorRefFactory, _, () => latch.countDown()))
     latch
   }
 }
