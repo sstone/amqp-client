@@ -91,13 +91,14 @@ object ConnectionOwner {
  * @param reconnectionDelay
  * @param system
  */
-class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: String = "/", user: String = "guest", password: String = "guest", name: String, reconnectionDelay: FiniteDuration = 10000 millis)(implicit system: ActorSystem) {
+class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: String = "/", user: String = "guest", password: String =
+  "guest", name: String, reconnectionDelay: FiniteDuration = 10000 millis)(implicit actorRefFactory: ActorRefFactory) {
   import ConnectionOwner._
-  lazy val owner = system.actorOf(Props(new ConnectionOwner(buildConnFactory(host = host, port = port, vhost = vhost, user = user, password = password), reconnectionDelay)), name = name)
+  lazy val owner = actorRefFactory.actorOf(Props(new ConnectionOwner(buildConnFactory(host = host, port = port, vhost = vhost, user = user, password = password), reconnectionDelay)), name = name)
 
-  def waitForConnection = Amqp.waitForConnection(system, owner)
+  def waitForConnection = Amqp.waitForConnection(actorRefFactory, owner)
 
-  def stop = system.stop(owner)
+  def stop = actorRefFactory.stop(owner)
 
   def createChild(props: Props, name: Option[String] = None, timeout: Timeout = 5000.millis): ActorRef = {
     val future = owner.ask(Create(props, name))(timeout).mapTo[ActorRef]
