@@ -55,7 +55,9 @@ object App {
       }
     }))
     // create a consumer that will pass all messages to the foo Actor; the consumer will declare the bindings
-    val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key")), foo)), 5000.millis)
+    val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(
+      init = List(AddBinding(Binding(exchange, queue, "my_key"))),
+      listener = Some(foo))), 5000.millis)
     val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
     waitForConnection(system, consumer, producer).await()
     producer ! Publish("amq.direct", "my_key", "yo!".getBytes, Some(new BasicProperties.Builder().contentType("my content").build()))
@@ -88,7 +90,9 @@ object App {
       }
     }))
     // create a consumer that will pass all messages to the foo Actor; the consumer will declare the bindings
-    val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key")), foo)), 5000.millis)
+    val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(
+      init = List(AddBinding(Binding(exchange, queue, "my_key"))),
+      listener = Some(foo))), 5000.millis)
     val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
     waitForConnection(system, consumer, producer).await()
     producer ! Publish("amq.direct", "my_key", "yo!".getBytes)
@@ -114,7 +118,10 @@ object App {
       }
     }))
     val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
-    val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key")), Some(foo), autoack = true)))
+    val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(
+      init = List(AddBinding(Binding(exchange, queue, "my_key"))),
+      listener = Some(foo),
+      autoack = true)))
     waitForConnection(system, producer, consumer).await()
     for (i <- 0 to 10) producer ! Transaction(Publish("amq.direct", "my_key", "yo".getBytes, mandatory = true, immediate = false) :: Nil)
     consumer ! PoisonPill

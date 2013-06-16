@@ -44,9 +44,11 @@ object ChannelOwner {
  * basically everything: create queues and bindings, publish messages, consume messages...
  * @param channelParams
  */
-class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Actor with FSM[ChannelOwner.State, ChannelOwner.Data] {
+class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None) extends Actor with FSM[ChannelOwner.State, ChannelOwner.Data] {
 
   import ChannelOwner._
+
+  var requestLog: Vector[Request] = init.toVector
 
   startWith(Disconnected, Uninitialized)
 
@@ -105,6 +107,13 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
      * sent by the actor's parent when the AMQP connection is lost
      */
     case Event(Shutdown(cause), _) => goto(Disconnected)
+
+    case Event(Record(request), _) => {
+      requestLog :+= request
+      self forward request
+      stay()
+    }
+
     case Event(request@Publish(exchange, routingKey, body, properties, mandatory, immediate), Connected(channel)) => {
       val props = properties getOrElse new AMQP.BasicProperties.Builder().build()
       stay replying withChannel(channel, request)(c => c.basicPublish(exchange, routingKey, mandatory, immediate, props, body))
@@ -159,6 +168,7 @@ class ChannelOwner(channelParams: Option[ChannelParameters] = None) extends Acto
   onTransition {
     case Disconnected -> Connected => {
       log.info("connected")
+      requestLog.foreach(r => self ! r)
     }
     case Connected -> Disconnected => {
       log.warning("disconnected")

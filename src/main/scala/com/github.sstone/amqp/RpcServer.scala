@@ -41,19 +41,17 @@ object RpcServer {
 /**
  * RPC Server, which
  * <ul>
- *   <Li>consume messages from a set of queues</li>
- *   <li>passes the message bodies to a "processor"</li>
- *   <li>sends back the result queue specified in the "replyTo" property</li>
+ * <Li>consume messages from a set of queues</li>
+ * <li>passes the message bodies to a "processor"</li>
+ * <li>sends back the result queue specified in the "replyTo" property</li>
  * </ul>
- * @param bindings list of (queue, exchange, key) bindings.
  * @param processor [[com.github.sstone.amqp.RpcServer.IProcessor]] implementation
  * @param channelParams optional channel parameters
  */
-class RpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None) extends Consumer(bindings, None, channelParams, autoack = false) {
-  import ExecutionContext.Implicits.global
+class RpcServer(processor: RpcServer.IProcessor, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None)
+  extends Consumer(listener = None, channelParams = channelParams, autoack = false) {
 
-  def this(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None)
-  = this(List(Binding(exchange, queue, routingKey)), processor, channelParams)
+  import ExecutionContext.Implicits.global
 
   import RpcServer._
 

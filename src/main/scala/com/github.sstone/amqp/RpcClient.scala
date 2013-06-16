@@ -17,7 +17,10 @@ object RpcClient {
 
 }
 
-class RpcClient(channelParams: Option[ChannelParameters] = None) extends ChannelOwner(channelParams) {
+class RpcClient(channelParams: Option[ChannelParameters] = None) extends Consumer(
+  init = List(AddQueue("")),
+  listener = None,
+  channelParams = channelParams) {
 
   import RpcClient._
 

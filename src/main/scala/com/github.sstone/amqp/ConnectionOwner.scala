@@ -105,15 +105,11 @@ class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: St
     Await.result(future, timeout.duration)
   }
 
-  def createChannelOwner(channelParams: Option[ChannelParameters] = None) = createChild(Props(new ChannelOwner(channelParams)))
+  def createChannelOwner(channelParams: Option[ChannelParameters] = None) = createChild(Props(new ChannelOwner(channelParams = channelParams)))
 
-  def createConsumer(bindings: List[Binding], listener: ActorRef, channelParams: Option[ChannelParameters], autoack: Boolean) = {
-    createChild(Props(new Consumer(bindings, Some(listener), channelParams, autoack)))
-  }
+  def createConsumer(bindings: List[Binding], listener: ActorRef, channelParams: Option[ChannelParameters], autoack: Boolean) = ???
 
-  def createConsumer(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, listener: ActorRef, channelParams: Option[ChannelParameters] = None, autoack: Boolean = false) = {
-    createChild(Props(new Consumer(List(Binding(exchange, queue, routingKey)), Some(listener), channelParams, autoack)))
-  }
+  def createConsumer(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, listener: ActorRef, channelParams: Option[ChannelParameters] = None, autoack: Boolean = false) = ???
 
   def createRpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters]) = {
     createChild(Props(new RpcServer(bindings, processor, channelParams)), None)
