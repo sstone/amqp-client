@@ -104,7 +104,7 @@ object Amqp {
 
   case class Transaction(publish: List[Publish]) extends Request
 
-  case class AddQueue(queue: String) extends Request
+  case class AddQueue(queue: QueueParameters) extends Request
 
   case class AddBinding(binding: Binding) extends Request
 

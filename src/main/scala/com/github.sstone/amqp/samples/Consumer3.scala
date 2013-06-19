@@ -21,12 +21,15 @@ object Consumer3 extends App {
   }))
 
   // create a consumer that will route incoming AMQP messages to our listener
-
   val queueParams = QueueParameters("my_queue", passive = false, durable = false, exclusive = false, autodelete = true)
 
   val consumer = conn.createChild(Props(new Consumer(listener = Some(listener))))
   // wait till everyone is actually connected to the broker
   Amqp.waitForConnection(system, consumer).await()
+
+  // create a queue, bind it to a routing key and consume from it
+  // here we wrap our requests inside a Record message, so will be replayed if the connection to
+  // the broker is lost and restored
   consumer ! Record(AddBinding(Binding(StandardExchanges.amqDirect, queueParams, "my_key")))
 
   // run the Producer sample now and see what happens

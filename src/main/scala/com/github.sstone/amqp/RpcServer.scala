@@ -48,8 +48,10 @@ object RpcServer {
  * @param processor [[com.github.sstone.amqp.RpcServer.IProcessor]] implementation
  * @param channelParams optional channel parameters
  */
-class RpcServer(processor: RpcServer.IProcessor, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None)
-  extends Consumer(listener = None, channelParams = channelParams, autoack = false) {
+class RpcServer(processor: RpcServer.IProcessor, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None) extends Consumer(listener = None, autoack = false, init = init, channelParams = channelParams) {
+
+  def this(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, proc: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None) =
+    this(processor = proc, init = List(AddBinding(Binding(exchange, queue, routingKey))), channelParams = channelParams)
 
   import ExecutionContext.Implicits.global
 

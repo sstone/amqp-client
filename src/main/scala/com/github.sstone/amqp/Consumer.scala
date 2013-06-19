@@ -12,7 +12,8 @@ import com.rabbitmq.client.AMQP.BasicProperties
  */
 class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None) extends ChannelOwner(init, channelParams) {
   import ChannelOwner._
-
+  // consumer tag -> queue map
+  val consumerTags = scala.collection.mutable.HashMap.empty[String, String]
   var consumer: Option[DefaultConsumer] = None
 
   override def onChannel(channel: Channel) {
@@ -22,14 +23,20 @@ class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[R
         destination ! Delivery(consumerTag, envelope, properties, body)
       }
     })
+    consumerTags.clear()
   }
 
   when(Connected) {
     /**
      * add a queue to our consumer
      */
-    case Event(request@AddQueue(queueName), Connected(channel)) => {
-      stay replying withChannel(channel, request)(c => c.basicConsume(queueName, autoack, consumer.get))
+    case Event(request@AddQueue(queue), Connected(channel)) => {
+      stay replying withChannel(channel, request)(c => {
+        val queueName = declareQueue(c, queue).getQueue
+        val consumerTag = c.basicConsume(queueName, autoack, consumer.get)
+        consumerTags.put(consumerTag, queueName)
+        consumerTag
+      })
     }
 
     /**
@@ -39,7 +46,9 @@ class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[R
       stay replying withChannel(channel, request)(c => {
         val queueName = declareQueue(c, binding.queue).getQueue
         c.queueBind(queueName, binding.exchange.name, binding.routingKey)
-        c.basicConsume(queueName, autoack, consumer.get)
+        val consumerTag = c.basicConsume(queueName, autoack, consumer.get)
+        consumerTags.put(consumerTag, queueName)
+        consumerTag
       })
     }
   }

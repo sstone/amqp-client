@@ -86,31 +86,54 @@ new channel
 
 YMMV, but using few connections (one per JVM) and many channels per connection (one per thread) is a common practice.
 
-### Basic usage
+### Wrapping the RabbitMQ client
 
-To create a connection, and a channel owner that you can use to publish message:
+As explained above, this is an actor-based wrapper around the RabbitMQ client, with 2 main classes: ConnectionOwner and
+ChannelOwner. Instead of calling the RabbitMQ [Channel](http://www.rabbitmq.com/releases/rabbitmq-java-client/v3.1.1/rabbitmq-java-client-javadoc-3.1.1/com/rabbitmq/client/Channel.html)
+interface, you send a message to a ChannelOwner actor, which replies whatever the java client returned wrapped in an Amqp.Ok()
+message if the call was successfull, or an Amqp.Error if it failed.
+
+For example, to declare a queue you could write:
 
 ``` scala
 
-  implicit val system = ActorSystem("mySystem")
-
-  // create an AMQP connection
   val conn = new RabbitMQConnection(host = "localhost", name = "Connection")
-
-  // create a "channel owner" on this connection
-  val producer = conn.createChannelOwner()
-
-  // wait till everyone is actually connected to the broker
-  Amqp.waitForConnection(system, producer).await()
-
-  // send a message
-  producer ! Publish("amq.direct", "my_key", "yo!!".getBytes, properties = None, mandatory = true, immediate = false)
+  val channel = conn.createChannelOwner()
+  channel ! DeclareQueue(QueueParameters("my_queue", passive = false, durable = false, exclusive = false, autodelete = true))
 
 ```
 
-To consume messages:
+Or, if you want to check the number of messages in a queue:
 
 ``` scala
+
+  val conn = new RabbitMQConnection(host = "localhost", name = "Connection")
+  val channel = conn.createChannelOwner()
+  val Amqp.Ok(_, Some(result: Queue.DeclareOk)) = Await.result(
+    (channel ? DeclareQueue(QueueParameters(name = "my_queue", passive = true))).mapTo[Amqp.Ok],
+    5 seconds
+  )
+  println("there are %d messages in the queue named %s".format(result.getMessageCount, result.getQueue))
+
+```
+
+### Initialization and failure handling
+
+If the connection to the broker is lost, ConnectionOwner actors will try and reconnect, and once they are connected
+again they will send a new AMQP channel to each of their ChannelOwner children.
+Likewise, the channel owned by a ChannelOwner is shut down because of an error if will request a new one from its parent.
+
+In this case you might want to "replay" some of the messages that were sent to the ChannelOnwer actor before it lost
+its channel, like queue declarations and bindings.
+
+For this, you have 2 options:
+* initialize the ChannelOwner with a list of requests
+* wrap requests inside a Record message
+
+Here, queues and bindings will be gone if the connection is lost and restored:
+
+``` scala
+
   implicit val system = ActorSystem("mySystem")
 
   // create an AMQP connection
@@ -118,7 +141,7 @@ To consume messages:
 
   // create an actor that will receive AMQP deliveries
   val listener = system.actorOf(Props(new Actor {
-    protected def receive = {
+    def receive = {
       case Delivery(consumerTag, envelope, properties, body) => {
         println("got a message: " + new String(body))
         sender ! Ack(envelope.getDeliveryTag)
@@ -127,14 +150,43 @@ To consume messages:
   }))
 
   // create a consumer that will route incoming AMQP messages to our listener
-  val queueParams = QueueParameters("my_queue", passive = false, durable = false, exclusive = false, autodelete = true)
-  val consumer = conn.createConsumer(Amqp.StandardExchanges.amqDirect, queueParams, "my_key", listener, None)
+  // it starts with an empty list of queues to consume from
+  val consumer = conn.createChild(Props(new Consumer(listener = Some(listener))))
 
   // wait till everyone is actually connected to the broker
   Amqp.waitForConnection(system, consumer).await()
 
+  // create a queue, bind it to a routing key and consume from it
+  // here we don't wrap our requests inside a Record message, so they won't replayed when if the connection to
+  // the broker is lost: queue and binding will be gone
+
+  // create a queue
+  val queueParams = QueueParameters("my_queue", passive = false, durable = false, exclusive = false, autodelete = true)
+  consumer ! DeclareQueue(queueParams)
+  // bind it
+  consumer ! QueueBind(queue = "my_queue", exchange = "amq.direct", routing_key = "my_key")
+  // tell our consumer to consume from it
+  consumer ! AddQueue(QueueParameters(name = "my_queue", passive = false))
+
 ```
 
+We can initialize our consumer with a list of messages that will be replayed each time its receives a new channel:
+
+``` scala
+
+  val consumer = conn.createChild(Props(new Consumer(
+    init = List(AddBinding(Binding(StandardExchanges.amqDirect, QueueParameters("my_queue", passive = false, durable = false, exclusive = false, autodelete = true), "my_key"))),
+    listener = Some(listener))))
+
+```
+
+Or can can wrap our initlization messages with Record to make sure they will be replayed each time its receives a new channel:
+
+``` scala
+
+  consumer ! Record(AddBinding(Binding(StandardExchanges.amqDirect, QueueParameters("my_queue", passive = false, durable = false, exclusive = false, autodelete = true), "my_key")))
+
+```
 
 ## RPC patterns
 

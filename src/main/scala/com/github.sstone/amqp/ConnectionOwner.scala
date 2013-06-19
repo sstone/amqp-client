@@ -89,7 +89,7 @@ object ConnectionOwner {
  * @param password
  * @param name
  * @param reconnectionDelay
- * @param system
+ * @param actorRefFactory
  */
 class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: String = "/", user: String = "guest", password: String =
   "guest", name: String, reconnectionDelay: FiniteDuration = 10000 millis)(implicit actorRefFactory: ActorRefFactory) {
@@ -112,11 +112,11 @@ class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: St
   def createConsumer(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, listener: ActorRef, channelParams: Option[ChannelParameters] = None, autoack: Boolean = false) = ???
 
   def createRpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters]) = {
-    createChild(Props(new RpcServer(bindings, processor, channelParams)), None)
+    createChild(Props(new RpcServer(processor, bindings.map(b => AddBinding(b)), channelParams)), None)
   }
 
   def createRpcServer(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters]) = {
-    createChild(Props(new RpcServer(List(Binding(exchange, queue, routingKey)), processor, channelParams)), None)
+    createChild(Props(new RpcServer(processor, List(AddBinding(Binding(exchange, queue, routingKey))), channelParams)), None)
   }
 
   def createRpcClient() = {

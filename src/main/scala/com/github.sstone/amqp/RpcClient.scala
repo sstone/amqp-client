@@ -17,10 +17,7 @@ object RpcClient {
 
 }
 
-class RpcClient(channelParams: Option[ChannelParameters] = None) extends Consumer(
-  init = List(AddQueue("")),
-  listener = None,
-  channelParams = channelParams) {
+class RpcClient(channelParams: Option[ChannelParameters] = None) extends ChannelOwner(channelParams = channelParams) {
 
   import RpcClient._
 
@@ -42,12 +39,7 @@ class RpcClient(channelParams: Option[ChannelParameters] = None) extends Consume
   }
 
   when(ChannelOwner.Connected) {
-    case Event(Publish(exchange, key, body, properties, mandatory, immediate), ChannelOwner.Connected(channel)) => {
-      val props = properties.getOrElse(new BasicProperties()).builder.build()
-      channel.basicPublish(exchange, key, mandatory, immediate, props, body)
-      stay
-    }
-    case Event(Request(publish, numberOfResponses), ChannelOwner.Connected(channel)) => {
+     case Event(Request(publish, numberOfResponses), ChannelOwner.Connected(channel)) => {
       counter = counter + 1
       publish.foreach(p => {
         val props = p.properties.getOrElse(new BasicProperties()).builder.correlationId(counter.toString).replyTo(queue).build()

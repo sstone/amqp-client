@@ -5,7 +5,7 @@ import com.rabbitmq.client.AMQP.BasicProperties
 import com.rabbitmq.client._
 import akka.actor.{Actor, FSM}
 import java.io.IOException
-import com.github.sstone.amqp.ConnectionOwner.Shutdown
+import com.github.sstone.amqp.ConnectionOwner.{CreateChannel, Shutdown}
 import com.github.sstone.amqp.Amqp._
 import scala.util.{Try, Failure, Success}
 
@@ -83,6 +83,7 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
         if (!cause.isInitiatedByApplication) {
           log.error(cause, "channel was shut down")
           self ! Shutdown(cause)
+          context.parent ! CreateChannel
         }
       }
     })
@@ -93,6 +94,11 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
     case Event(channel: Channel, _) => {
       setup(channel)
       goto(Connected) using Connected(channel)
+    }
+    case Event(Record(request), _) => {
+      requestLog :+= request
+      self forward request
+      stay()
     }
   }
 

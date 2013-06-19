@@ -21,9 +21,10 @@ object Consumer2 extends App {
   }))
 
   // create a consumer that will route incoming AMQP messages to our listener
-
   val queueParams = QueueParameters("my_queue", passive = false, durable = false, exclusive = false, autodelete = true)
 
+  // we initialize our consumer with an AddBinding request: the queue and the binding will be recreated if the connection
+  // to the broker is lost and restored
   val consumer = conn.createChild(Props(new Consumer(
     init = List(AddBinding(Binding(StandardExchanges.amqDirect, queueParams, "my_key"))),
     listener = Some(listener))))
