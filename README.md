@@ -2,7 +2,7 @@
 
 Simple [AMQP](http://www.amqp.org/) client in Scala/Akka based on the [RabbitMQ](http://www.rabbitmq.com/) java client.
 
-[![Build Status](https://travis-ci.org/sstone/amqp-client.png)](https://travis-ci.org/sstone/amqp-client)
+[![Build Status](https://travis-ci.org/sstone/amqp-client.png?branch=scala2.10)](https://travis-ci.org/sstone/amqp-client)
 
 ## Overview
 
