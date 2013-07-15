@@ -16,7 +16,6 @@ import ConnectionOwner.CreateChannel
 @RunWith(classOf[JUnitRunner])
 class ConnectionOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec with ShouldMatchers with ImplicitSender {
   implicit val timeout = Timeout(5 seconds)
-  implicit val sys = system
 
   "ConnectionOwner" should {
     "provide channels for many child actors" in {
