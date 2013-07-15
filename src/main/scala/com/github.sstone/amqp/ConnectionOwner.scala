@@ -173,6 +173,7 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteD
         case e: IOException => {
           log.error(e, "cannot connect to {}, retrying in {}", connFactory, reconnectionDelay)
           setTimer("reconnect", 'connect, reconnectionDelay, true)
+          stay()
         }
       }
     }

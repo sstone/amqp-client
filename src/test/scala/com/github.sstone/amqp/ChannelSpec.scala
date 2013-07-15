@@ -27,6 +27,7 @@ class ChannelSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec with 
 
   after {
     println("after")
-    Await.result(gracefulStop(conn, 5 seconds)(system), 6 seconds)
+    implicit val sys = system
+    Await.result(gracefulStop(conn, 5 seconds), 6 seconds)
   }
 }

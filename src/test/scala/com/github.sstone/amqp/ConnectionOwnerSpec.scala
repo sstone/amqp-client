@@ -16,6 +16,7 @@ import ConnectionOwner.CreateChannel
 @RunWith(classOf[JUnitRunner])
 class ConnectionOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec with ShouldMatchers with ImplicitSender {
   implicit val timeout = Timeout(5 seconds)
+  implicit val sys = system
 
   "ConnectionOwner" should {
     "provide channels for many child actors" in {
@@ -27,7 +28,7 @@ class ConnectionOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSp
         p.send(conn.owner, CreateChannel)
         p.expectMsgClass(2.second, classOf[Channel])
       }
-      Await.result(gracefulStop(conn.owner, 5 seconds)(system), 6 seconds)
+      Await.result(gracefulStop(conn.owner, 5 seconds), 6 seconds)
     }
   }
 }
