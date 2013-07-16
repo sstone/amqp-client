@@ -121,6 +121,7 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
     }
 
     case Event(request@Publish(exchange, routingKey, body, properties, mandatory, immediate), Connected(channel)) => {
+      log.debug("publishing %s".format(request))
       val props = properties getOrElse new AMQP.BasicProperties.Builder().build()
       stay replying withChannel(channel, request)(c => c.basicPublish(exchange, routingKey, mandatory, immediate, props, body))
     }

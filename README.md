@@ -90,7 +90,7 @@ YMMV, but using few connections (one per JVM) and many channels per connection (
 
 As explained above, this is an actor-based wrapper around the RabbitMQ client, with 2 main classes: ConnectionOwner and
 ChannelOwner. Instead of calling the RabbitMQ [Channel](http://www.rabbitmq.com/releases/rabbitmq-java-client/v3.1.1/rabbitmq-java-client-javadoc-3.1.1/com/rabbitmq/client/Channel.html)
-interface, you send a message to a ChannelOwner actor, which replies whatever the java client returned wrapped in an Amqp.Ok()
+interface, you send a message to a ChannelOwner actor, which replies with whatever the java client returned wrapped in an Amqp.Ok()
 message if the call was successfull, or an Amqp.Error if it failed.
 
 For example, to declare a queue you could write:
@@ -121,7 +121,8 @@ Or, if you want to check the number of messages in a queue:
 
 If the connection to the broker is lost, ConnectionOwner actors will try and reconnect, and once they are connected
 again they will send a new AMQP channel to each of their ChannelOwner children.
-Likewise, the channel owned by a ChannelOwner is shut down because of an error if will request a new one from its parent.
+
+Likewise, if the channel owned by a ChannelOwner is shut down because of an error it will request a new one from its parent.
 
 In this case you might want to "replay" some of the messages that were sent to the ChannelOnwer actor before it lost
 its channel, like queue declarations and bindings.

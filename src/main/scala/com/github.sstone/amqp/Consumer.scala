@@ -31,6 +31,7 @@ class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[R
      * add a queue to our consumer
      */
     case Event(request@AddQueue(queue), Connected(channel)) => {
+      log.debug("processing %s".format(request))
       stay replying withChannel(channel, request)(c => {
         val queueName = declareQueue(c, queue).getQueue
         val consumerTag = c.basicConsume(queueName, autoack, consumer.get)
@@ -43,6 +44,7 @@ class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[R
      * add a binding to our consumer: declare the queue, bind it, and consume from it
      */
     case Event(request@AddBinding(binding), Connected(channel)) => {
+      log.debug("processing %s".format(request))
       stay replying withChannel(channel, request)(c => {
         val queueName = declareQueue(c, binding.queue).getQueue
         c.queueBind(queueName, binding.exchange.name, binding.routingKey)
