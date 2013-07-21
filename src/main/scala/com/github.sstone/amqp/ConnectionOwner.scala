@@ -1,13 +1,15 @@
 package com.github.sstone.amqp
 
-import java.io.IOException
-import akka.util.Timeout
-import com.rabbitmq.client.{Connection, ShutdownSignalException, ShutdownListener, ConnectionFactory}
-import akka.actor._
-import akka.pattern.ask
-import Amqp._
+import scala.util.{Failure, Success, Try}
 import concurrent.Await
 import concurrent.duration._
+import java.io.IOException
+import akka.util.Timeout
+import akka.actor._
+import akka.pattern.ask
+import com.rabbitmq.client.{Connection, ShutdownSignalException, ShutdownListener, ConnectionFactory}
+import Amqp._
+
 
 
 object ConnectionOwner {
@@ -92,8 +94,10 @@ object ConnectionOwner {
  * @param actorRefFactory
  */
 class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: String = "/", user: String = "guest", password: String =
-  "guest", name: String, reconnectionDelay: FiniteDuration = 10000 millis)(implicit actorRefFactory: ActorRefFactory) {
+"guest", name: String, reconnectionDelay: FiniteDuration = 10000 millis)(implicit actorRefFactory: ActorRefFactory) {
+
   import ConnectionOwner._
+
   lazy val owner = actorRefFactory.actorOf(Props(new ConnectionOwner(buildConnFactory(host = host, port = port, vhost = vhost, user = user, password = password), reconnectionDelay)), name = name)
 
   def waitForConnection = Amqp.waitForConnection(actorRefFactory, owner)
@@ -140,7 +144,13 @@ class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: St
  * @param reconnectionDelay delay between reconnection attempts
  */
 class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteDuration = 10000 millis) extends Actor with FSM[ConnectionOwner.State, ConnectionOwner.Data] {
+
   import ConnectionOwner._
+
+  override def preStart() {
+    self ! 'connect
+  }
+
   startWith(Disconnected, Uninitialized)
 
   /**
@@ -195,16 +205,15 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteD
     /*
      * channel request. send back a channel
      */
-    case Event(CreateChannel, Connected(conn)) => stay replying conn.createChannel()
+    case Event(CreateChannel, Connected(conn)) => Try(conn.createChannel()) match {
+      case Success(channel) => stay replying channel
+      case Failure(cause) => goto(Disconnected) using Uninitialized
+    }
     /*
      * create a "channel aware" actor that will request channels from this connection actor
      */
     case Event(Create(props, name), Connected(conn)) => {
-      val channel = conn.createChannel()
       val child = createChild(props, name)
-      log.debug("creating child {} with channel {}", child, channel)
-      // send a channel to the kid
-      child ! channel
       stay replying child
     }
     /*
@@ -213,10 +222,9 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteD
     case Event(Shutdown(cause), _) => {
       if (!cause.isInitiatedByApplication) {
         log.error(cause.toString)
-        self ! 'connect
         context.children.foreach(_ ! Shutdown(cause))
       }
-      goto(Disconnected) using (Uninitialized)
+      goto(Disconnected) using Uninitialized
     }
   }
 
@@ -228,7 +236,10 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteD
         case _ => {}
       }
     }
-    case Connected -> Disconnected => log.warning("lost connection to " + toUri(connFactory))
+    case Connected -> Disconnected => {
+      log.warning("lost connection to " + toUri(connFactory))
+      self ! 'connect
+    }
   }
 
   onTermination {
@@ -238,8 +249,6 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteD
     }
   }
 
-  override def preStart() {
-    self ! 'connect
-  }
+  initialize
 }
 

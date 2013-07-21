@@ -18,6 +18,7 @@ import com.github.sstone.amqp.Amqp.ExchangeParameters
 import com.github.sstone.amqp.RpcClient.Request
 import com.github.sstone.amqp.Amqp.QueueParameters
 import com.github.sstone.amqp.Amqp.Delivery
+import java.util.concurrent.TimeUnit
 
 @RunWith(classOf[JUnitRunner])
 class RpcSpec extends ChannelSpec {
@@ -26,11 +27,11 @@ class RpcSpec extends ChannelSpec {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "my_queue", passive = false)
       val proc = new RpcServer.IProcessor() {
-        def process(delivery: Delivery) = {
+        def process(delivery: Delivery) = Future {
           println("processing")
           val s = new String(delivery.body)
           if (s == "5") throw new Exception("I dont do 5s")
-          Future(ProcessResult(Some(delivery.body)))
+          ProcessResult(Some(delivery.body))
         }
 
         def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(Some(e.toString.getBytes))
@@ -41,7 +42,7 @@ class RpcSpec extends ChannelSpec {
       waitForConnection(system, conn, server, client1, client2).await()
 
       val f1 = Future {
-        for (i <- 0 to 15) {
+        for (i <- 0 to 10) {
           try {
             val future = client1 ? Request(Publish("amq.direct", "my_key", i.toString.getBytes) :: Nil, 1)
             val result = Await.result(future, 1000.millis).asInstanceOf[Response]
@@ -54,7 +55,7 @@ class RpcSpec extends ChannelSpec {
         }
       }
       val f2 = Future {
-        for (i <- 0 to 15) {
+        for (i <- 0 to 10) {
           try {
             val future = client2 ? Request(Publish("amq.direct", "my_key", i.toString.getBytes) :: Nil, 1)
             val result = Await.result(future, 1000.millis).asInstanceOf[Response]
@@ -74,16 +75,16 @@ class RpcSpec extends ChannelSpec {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "my_queue", passive = false)
       val proc = new RpcServer.IProcessor() {
-        def process(delivery: Delivery) = {
+        def process(delivery: Delivery) = Future {
           // return the same body with the same properties
-          Future(ProcessResult(Some(delivery.body), Some(delivery.properties)))
+          ProcessResult(Some(delivery.body), Some(delivery.properties))
         }
 
         def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(Some(e.toString.getBytes), Some(delivery.properties))
       }
       val server = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "my_key", proc)), 2000.millis)
       val client = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000.millis)
-      waitForConnection(system, conn, server, client).await()
+      waitForConnection(system, conn, server, client).await(2, TimeUnit.SECONDS)
       val myprops = new BasicProperties.Builder().contentType("my content").contentEncoding("my encoding").build()
       val future = client ? Request(Publish("amq.direct", "my_key", "yo!!".getBytes, Some(myprops)) :: Nil, 1)
       val result = Await.result(future, 1000.millis).asInstanceOf[Response]
@@ -96,7 +97,7 @@ class RpcSpec extends ChannelSpec {
   "RPC Clients" should {
     "correctly handle returned message" in {
       val client = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000.millis)
-      waitForConnection(system, conn, client)
+      waitForConnection(system, conn, client).await(2, TimeUnit.SECONDS)
 
       val future = client ? Request(Publish("", "mykey", "yo!".getBytes) :: Nil, 1)
       val result = Await.result(future, 1000.millis)
@@ -124,7 +125,7 @@ class RpcSpec extends ChannelSpec {
       val server2 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "mykey", proc2)), 2000.millis)
 
       val client = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000.millis)
-      waitForConnection(system, conn, server1, server2, client)
+      waitForConnection(system, conn, server1, server2, client).await(2, TimeUnit.SECONDS)
       val future = client ? Request(Publish(exchange.name, "mykey", "yo!".getBytes) :: Nil, 2)
       val result = Await.result(future, 2000.millis).asInstanceOf[Response]
       assert(result.deliveries.length === 2)

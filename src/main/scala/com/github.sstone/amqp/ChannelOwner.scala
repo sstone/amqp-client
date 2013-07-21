@@ -52,6 +52,10 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
 
   startWith(Disconnected, Uninitialized)
 
+  override def preStart() {
+    context.parent ! CreateChannel
+  }
+
   override def preRestart(reason: Throwable, message: Option[Any]) {
     log.warning("preRestart {} {}", reason, message)
     super.preRestart(reason, message)
@@ -107,7 +111,7 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
       // we already have a channel, close this one to prevent resource leaks
       log.warning("closing unexpected channel {}", channel)
       channel.close()
-      stay
+      stay()
     }
     /*
      * sent by the actor's parent when the AMQP connection is lost
@@ -193,4 +197,6 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
       }
     }
   }
+
+  initialize
 }
