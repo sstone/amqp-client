@@ -60,7 +60,7 @@ The latest snapshot (development) version is 1.2-SNAPSHOT, the latest released v
 * amqp-client 1.1 is compatible with Scala 2.9.2 and Akka 2.0.5
 * amqp-client 1.1 is compatible with Scala 2.10.0 and Akka 2.1.0
 
-Support for Akka 2.2.0 is in progress (see
+Support for Akka 2.2.0 is in progress (see [issue #18](https://github.com/sstone/amqp-client/issues/18))
 
 ## Library design
 
