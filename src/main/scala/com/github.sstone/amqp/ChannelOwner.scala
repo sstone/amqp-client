@@ -3,7 +3,7 @@ package com.github.sstone.amqp
 import collection.JavaConversions._
 import com.rabbitmq.client.AMQP.BasicProperties
 import com.rabbitmq.client._
-import akka.actor.{Actor, FSM}
+import akka.actor.{Props, Actor, FSM}
 import java.io.IOException
 import com.github.sstone.amqp.ConnectionOwner.{CreateChannel, Shutdown}
 import com.github.sstone.amqp.Amqp._
@@ -17,11 +17,14 @@ object ChannelOwner {
 
   case object Connected extends State
 
+  def props(init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None): Props = Props(new ChannelOwner(init, channelParams))
+
   private[amqp] sealed trait Data
 
   private[amqp] case object Uninitialized extends Data
 
   private[amqp] case class Connected(channel: com.rabbitmq.client.Channel) extends Data
+
 
   def withChannel[T](channel: Channel, request: Request)(f: Channel => T) = {
     Try(f(channel)) match {
@@ -173,6 +176,13 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
     case Event(request@QueueUnbind(queue, exchange, routingKey, args), Connected(channel)) => {
       log.debug("unbinding queue {} to key {} on exchange {}", queue, routingKey, exchange)
       stay replying withChannel(channel, request)(c => c.queueUnbind(queue, exchange, routingKey, args))
+    }
+  }
+
+  whenUnhandled {
+    case Event(ok@Ok(_, _), _) => {
+      log.debug("ignoring successful reply to self: {}", ok)
+      stay()
     }
   }
 

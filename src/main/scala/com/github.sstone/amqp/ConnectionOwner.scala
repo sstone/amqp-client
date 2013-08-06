@@ -20,6 +20,10 @@ object ConnectionOwner {
 
   case object Connected extends State
 
+  case class Create(props: Props, name: Option[String] = None)
+
+  def props(connFactory: ConnectionFactory, reconnectionDelay: FiniteDuration = 10000 millis) : Props = Props(new ConnectionOwner(connFactory, reconnectionDelay))
+
   private[amqp] sealed trait Data
 
   private[amqp] case object Uninitialized extends Data
@@ -29,27 +33,6 @@ object ConnectionOwner {
   private[amqp] case class CreateChannel()
 
   private[amqp] case class Shutdown(cause: ShutdownSignalException)
-
-  case class Create(props: Props, name: Option[String] = None)
-
-  /** ask a ConnectionOwner to create a "channel owner" actor (producer, consumer, rpc client or server
-    * ... or even you own)
-    *
-    * @param conn ConnectionOwner actor
-    * @param props actor configuration object
-    * @param name optional actor name
-    * @param timeout time out
-    * @return a reference to to created actor
-    * @deprecated use createChildActor instead
-    */
-  @Deprecated
-  def createActor(conn: ActorRef, props: Props, name: Option[String] = None, timeout: Timeout = 5000.millis): ActorRef = {
-    val future = conn.ask(Create(props, name))(timeout).mapTo[ActorRef]
-    Await.result(future, timeout.duration)
-  }
-
-  @Deprecated
-  def createActor(conn: ActorRef, props: Props, timeout: Timeout): ActorRef = createActor(conn, props, None, timeout)
 
   def createChildActor(conn: ActorRef, channelOwner: Props, name: Option[String] = None, timeout: Timeout = 5000.millis): ActorRef = {
     val future = conn.ask(Create(channelOwner, name))(timeout).mapTo[ActorRef]
@@ -111,9 +94,13 @@ class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: St
 
   def createChannelOwner(channelParams: Option[ChannelParameters] = None) = createChild(Props(new ChannelOwner(channelParams = channelParams)))
 
-  def createConsumer(bindings: List[Binding], listener: ActorRef, channelParams: Option[ChannelParameters], autoack: Boolean) = ???
+  def createConsumer(bindings: List[Binding], listener: ActorRef, channelParams: Option[ChannelParameters], autoack: Boolean) = {
+    createChild(Consumer.props(Some(listener), autoack, bindings.map(b => AddBinding(b)), channelParams))
+  }
 
-  def createConsumer(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, listener: ActorRef, channelParams: Option[ChannelParameters] = None, autoack: Boolean = false) = ???
+  def createConsumer(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, listener: ActorRef, channelParams: Option[ChannelParameters] = None, autoack: Boolean = false) = {
+    createChild(Consumer.props(listener, exchange, queue, routingKey, channelParams, autoack))
+  }
 
   def createRpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters]) = {
     createChild(Props(new RpcServer(processor, bindings.map(b => AddBinding(b)), channelParams)), None)

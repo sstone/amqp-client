@@ -5,6 +5,7 @@ import com.rabbitmq.client.AMQP.BasicProperties
 import com.rabbitmq.client.{Envelope, Channel}
 import concurrent.{ExecutionContext, Future}
 import util.{Failure, Success}
+import akka.actor.Props
 
 object RpcServer {
 
@@ -36,6 +37,14 @@ object RpcServer {
     def onFailure(delivery: Delivery, e: Throwable): ProcessResult
   }
 
+  def props(processor: RpcServer.IProcessor, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None): Props = Props(new RpcServer(processor, init, channelParams))
+
+  def props(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, proc: RpcServer.IProcessor, channelParams: ChannelParameters): Props =
+    props(processor = proc, init = List(AddBinding(Binding(exchange, queue, routingKey))), channelParams = Some(channelParams))
+
+  def props(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, proc: RpcServer.IProcessor): Props =
+    props(processor = proc, init = List(AddBinding(Binding(exchange, queue, routingKey))))
+
 }
 
 /**
@@ -49,9 +58,6 @@ object RpcServer {
  * @param channelParams optional channel parameters
  */
 class RpcServer(processor: RpcServer.IProcessor, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None) extends Consumer(listener = None, autoack = false, init = init, channelParams = channelParams) {
-
-  def this(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, proc: RpcServer.IProcessor, channelParams: Option[ChannelParameters] = None) =
-    this(processor = proc, init = List(AddBinding(Binding(exchange, queue, routingKey))), channelParams = channelParams)
 
   import ExecutionContext.Implicits.global
 

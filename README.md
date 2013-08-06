@@ -60,6 +60,8 @@ The latest snapshot (development) version is 1.2-SNAPSHOT, the latest released v
 * amqp-client 1.1 is compatible with Scala 2.9.2 and Akka 2.0.5
 * amqp-client 1.1 is compatible with Scala 2.10.0 and Akka 2.1.0
 
+Support for Akka 2.2.0 is in progress (see
+
 ## Library design
 
 This is a thin wrapper over the RabbitMQ java client, which tries to take advantage of the nice actor model provided
@@ -198,18 +200,13 @@ Typical RPC with AMQP follows this pattern:
 3.  server processes the message and replies to its 'replyTo' queue by publishing the response to the default exchange using the queue name as routing key (all queues are bound to their name
 on the default exchange)
 
-Usually, you would set up several RPC servers which all use the same shared queue. The broker will load-balance messsages
-between these consumers using round-robin distribution, which can be combined with 'prefetch' channel settings.
+### Distributed Worker Pattern
+
+This is one of the simplest but most useful pattern: using a shared queue to distributed work among consumers.
+The broker will load-balance messsages between these consumers using round-robin distribution, which can be combined with 'prefetch' channel settings.
 Setting 'prefetch' to 1 is very useful if you need resource-based (CPU, ...) load-balancing.
-
-But you can also extend this pattern by setting up RPC servers which all use private exclusive queues
-bound to the same key. In this case, each server will receive the same request and will send back a response.
-This is very useful if you want to break a single operation into multiple, parallel steps.
-
-This could be further extended with a simple 'workflow' pattern where each server publishes its results
-to the shared queue used by the next step.
-For example, if you want to chain steps A, B and C, set up a shared queue for each step, have 'A' processors
-publish to queue 'B', 'B' processors publish to queue 'C' ....
+You will typicall use explicit ackowledgments and ack messages once they have been processed and the response has been sent. This
+way, if your consumer fails to process the request or is disconnected, the broker will re-send the same request to another consumer.
 
 ``` scala
   // typical "work queue" pattern, where a job can be picked up by any running node
@@ -258,6 +255,14 @@ publish to queue 'B', 'B' processors publish to queue 'C' ....
   system.shutdown()
 
 ```
+
+### One request/several responses
+
+If your process is "sharded" and one request should result in several responses (one per shard for example) you can
+use private exclusive queues which are all bound to the same key. In this case, each server will receive the same request and
+will send back a response.
+
+This is very useful if you want to break a single operation into multiple, parallel steps.
 
 ``` scala
 
@@ -313,6 +318,13 @@ publish to queue 'B', 'B' processors publish to queue 'C' ....
   system.shutdown()
 
 ```
+
+### Workflow Pattern
+
+This could be further extended with a simple 'workflow' pattern where each server publishes its results
+to the shared queue used by the next step.
+For example, if you want to chain steps A, B and C, set up a shared queue for each step, have 'A' processors
+publish to queue 'B', 'B' processors publish to queue 'C' ....
 
 
 ## Samples

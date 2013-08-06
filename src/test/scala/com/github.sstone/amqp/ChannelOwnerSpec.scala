@@ -50,7 +50,7 @@ class ChannelOwnerSpec extends ChannelSpec  {
   "Multiple ChannelOwners" should {
     "each transition from Disconnected to Connected when they receive a channel" in {
       val concurrent = 10
-      val actors = for (i <- 1 until concurrent) yield ConnectionOwner.createActor(conn, Props(new ChannelOwner()), name = Some(i + "-instance"))
+      val actors = for (i <- 1 until concurrent) yield ConnectionOwner.createChildActor(conn, ChannelOwner.props(), name = Some(i + "-instance"))
       val latch = waitForConnection(system, actors: _*)
       latch.await(10000, TimeUnit.MILLISECONDS)
       latch.getCount should be(0)

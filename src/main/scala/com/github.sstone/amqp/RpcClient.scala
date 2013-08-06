@@ -1,19 +1,30 @@
 package com.github.sstone.amqp
 
-import akka.actor.ActorRef
-import Amqp._
+import akka.actor.{Props, ActorRef}
+import com.github.sstone.amqp.Amqp._
 import com.rabbitmq.client.{Envelope, Channel, DefaultConsumer}
 import com.rabbitmq.client.AMQP.BasicProperties
+import com.github.sstone.amqp.Amqp.ReturnedMessage
+import com.github.sstone.amqp.Amqp.Publish
+import com.github.sstone.amqp.Amqp.ChannelParameters
+import scala.Some
+import com.github.sstone.amqp.Amqp.QueueParameters
+import com.github.sstone.amqp.Amqp.Delivery
 
 object RpcClient {
-
-  private[amqp] case class RpcResult(destination: ActorRef, expected: Int, deliveries: scala.collection.mutable.ListBuffer[Delivery])
-
   case class Request(publish: List[Publish], numberOfResponses: Int = 1)
+
+  object Request {
+    def apply(publish: Publish) = new Request(List(publish), 1)
+  }
 
   case class Response(deliveries: List[Delivery])
 
   case class Undelivered(msg: ReturnedMessage)
+
+  def props(channelParams: Option[ChannelParameters] = None): Props = Props(new RpcClient(channelParams))
+
+  private[amqp] case class RpcResult(destination: ActorRef, expected: Int, deliveries: scala.collection.mutable.ListBuffer[Delivery])
 
 }
 

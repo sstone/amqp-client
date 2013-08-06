@@ -20,13 +20,17 @@ class ProducerSpec extends ChannelSpec {
       val exchange = StandardExchanges.amqDirect
       val queue = QueueParameters(name = "queue", passive = false, exclusive = false)
       val probe = TestProbe()
-      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(listener = Some(probe.ref))), 5000.millis)
-      val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
+      val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(listener = Some(probe.ref)), timeout = 5000 millis)
+      val producer = ConnectionOwner.createChildActor(conn, ChannelOwner.props())
       waitForConnection(system, conn, consumer, producer).await()
 
       // create a queue, bind it to "my_key" and consume from it
       consumer ! AddBinding(Binding(exchange, queue, "my_key"))
-      val Amqp.Ok(_, Some(consumerTag: String)) = receiveOne(1 second)
+
+      fishForMessage(1 second) {
+        case Amqp.Ok(AddBinding(Binding(`exchange`, `queue`, "my_key")), _) => true
+        case _ => false
+      }
 
       val message = "yo!".getBytes
       producer ! Publish(exchange.name, "my_key", message, Some(new BasicProperties.Builder().contentType("my content").build()))
@@ -39,12 +43,17 @@ class ProducerSpec extends ChannelSpec {
       val exchange = StandardExchanges.amqDirect
       val queue = QueueParameters(name = "queue", passive = false, exclusive = false)
       val probe = TestProbe()
-      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(listener = Some(probe.ref))), 5000.millis)
-      val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
+      val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(listener = Some(probe.ref)), timeout = 5000 millis)
+      val producer = ConnectionOwner.createChildActor(conn, ChannelOwner.props())
       waitForConnection(system, conn, consumer, producer).await()
 
+      // create a queue, bind it to "my_key" and consume from it
       consumer ! AddBinding(Binding(exchange, queue, "my_key"))
-      expectMsgClass(1 second, classOf[Amqp.Ok])
+
+      fishForMessage(1 second) {
+        case Amqp.Ok(AddBinding(Binding(`exchange`, `queue`, "my_key")), _) => true
+        case _ => false
+      }
 
       val message = "yo!".getBytes
       producer ! Transaction(List(Publish(exchange.name, "my_key", message), Publish(exchange.name, "my_key", message), Publish(exchange.name, "my_key", message)))

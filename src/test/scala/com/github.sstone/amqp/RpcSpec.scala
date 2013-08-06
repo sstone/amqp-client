@@ -36,9 +36,9 @@ class RpcSpec extends ChannelSpec {
 
         def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(Some(e.toString.getBytes))
       }
-      val server = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "my_key", proc)), 2000.millis)
-      val client1 = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000.millis)
-      val client2 = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000.millis)
+      val server = ConnectionOwner.createChildActor(conn, RpcServer.props(queue, exchange, "my_key", proc))
+      val client1 = ConnectionOwner.createChildActor(conn, RpcClient.props())
+      val client2 = ConnectionOwner.createChildActor(conn, RpcClient.props())
       waitForConnection(system, conn, server, client1, client2).await()
 
       val f1 = Future {
@@ -82,8 +82,8 @@ class RpcSpec extends ChannelSpec {
 
         def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(Some(e.toString.getBytes), Some(delivery.properties))
       }
-      val server = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "my_key", proc)), 2000.millis)
-      val client = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000.millis)
+      val server = ConnectionOwner.createChildActor(conn, RpcServer.props(queue, exchange, "my_key", proc), timeout = 2000.millis)
+      val client = ConnectionOwner.createChildActor(conn, RpcClient.props(), timeout = 2000.millis)
       waitForConnection(system, conn, server, client).await(2, TimeUnit.SECONDS)
       val myprops = new BasicProperties.Builder().contentType("my content").contentEncoding("my encoding").build()
       val future = client ? Request(Publish("amq.direct", "my_key", "yo!!".getBytes, Some(myprops)) :: Nil, 1)
@@ -96,7 +96,7 @@ class RpcSpec extends ChannelSpec {
 
   "RPC Clients" should {
     "correctly handle returned message" in {
-      val client = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000.millis)
+      val client = ConnectionOwner.createChildActor(conn, RpcClient.props(), timeout = 2000.millis)
       waitForConnection(system, conn, client).await(2, TimeUnit.SECONDS)
 
       val future = client ? Request(Publish("", "mykey", "yo!".getBytes) :: Nil, 1)
@@ -116,15 +116,15 @@ class RpcSpec extends ChannelSpec {
 
         def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(None)
       }
-      val server1 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "mykey", proc1)), 2000.millis)
+      val server1 = ConnectionOwner.createChildActor(conn, RpcServer.props(queue, exchange, "mykey", proc1), timeout = 2000.millis)
       val proc2 = new IProcessor {
         def process(delivery: Delivery) = Future(ProcessResult(Some("proc2".getBytes)))
 
         def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(None)
       }
-      val server2 = ConnectionOwner.createActor(conn, Props(new RpcServer(queue, exchange, "mykey", proc2)), 2000.millis)
+      val server2 = ConnectionOwner.createChildActor(conn, RpcServer.props(queue, exchange, "mykey", proc2), timeout = 2000.millis)
 
-      val client = ConnectionOwner.createActor(conn, Props(new RpcClient()), 2000.millis)
+      val client = ConnectionOwner.createChildActor(conn, RpcClient.props(), timeout = 2000.millis)
       waitForConnection(system, conn, server1, server2, client).await(2, TimeUnit.SECONDS)
       val future = client ? Request(Publish(exchange.name, "mykey", "yo!".getBytes) :: Nil, 2)
       val result = Await.result(future, 2000.millis).asInstanceOf[Response]
