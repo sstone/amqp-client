@@ -104,6 +104,12 @@ object Amqp {
 
   case class Transaction(publish: List[Publish]) extends Request
 
+  case class AddQueue(queue: QueueParameters) extends Request
+
+  case class AddBinding(binding: Binding) extends Request
+
+  case class Record(request: Request) extends Request
+
   /**
    * sent back by a publisher when the request was processed successfully
    * @param request original request

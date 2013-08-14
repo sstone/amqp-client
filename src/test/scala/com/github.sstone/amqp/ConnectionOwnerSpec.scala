@@ -27,7 +27,7 @@ class ConnectionOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSp
         p.send(conn.owner, CreateChannel)
         p.expectMsgClass(2.second, classOf[Channel])
       }
-      Await.result(gracefulStop(conn.owner, 5 seconds)(system), 6 seconds)
+      Await.result(gracefulStop(conn.owner, 5 seconds), 6 seconds)
     }
   }
 }

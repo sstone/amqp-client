@@ -1,13 +1,15 @@
 package com.github.sstone.amqp
 
-import java.io.IOException
-import akka.util.Timeout
-import com.rabbitmq.client.{Connection, ShutdownSignalException, ShutdownListener, ConnectionFactory}
-import akka.actor._
-import akka.pattern.ask
-import Amqp._
+import scala.util.{Failure, Success, Try}
 import concurrent.Await
 import concurrent.duration._
+import java.io.IOException
+import akka.util.Timeout
+import akka.actor._
+import akka.pattern.ask
+import com.rabbitmq.client.{Connection, ShutdownSignalException, ShutdownListener, ConnectionFactory}
+import Amqp._
+
 
 
 object ConnectionOwner {
@@ -18,6 +20,10 @@ object ConnectionOwner {
 
   case object Connected extends State
 
+  case class Create(props: Props, name: Option[String] = None)
+
+  def props(connFactory: ConnectionFactory, reconnectionDelay: FiniteDuration = 10000 millis) : Props = Props(new ConnectionOwner(connFactory, reconnectionDelay))
+
   private[amqp] sealed trait Data
 
   private[amqp] case object Uninitialized extends Data
@@ -27,27 +33,6 @@ object ConnectionOwner {
   private[amqp] case class CreateChannel()
 
   private[amqp] case class Shutdown(cause: ShutdownSignalException)
-
-  case class Create(props: Props, name: Option[String] = None)
-
-  /** ask a ConnectionOwner to create a "channel owner" actor (producer, consumer, rpc client or server
-    * ... or even you own)
-    *
-    * @param conn ConnectionOwner actor
-    * @param props actor configuration object
-    * @param name optional actor name
-    * @param timeout time out
-    * @return a reference to to created actor
-    * @deprecated use createChildActor instead
-    */
-  @Deprecated
-  def createActor(conn: ActorRef, props: Props, name: Option[String] = None, timeout: Timeout = 5000.millis): ActorRef = {
-    val future = conn.ask(Create(props, name))(timeout).mapTo[ActorRef]
-    Await.result(future, timeout.duration)
-  }
-
-  @Deprecated
-  def createActor(conn: ActorRef, props: Props, timeout: Timeout): ActorRef = createActor(conn, props, None, timeout)
 
   def createChildActor(conn: ActorRef, channelOwner: Props, name: Option[String] = None, timeout: Timeout = 5000.millis): ActorRef = {
     val future = conn.ask(Create(channelOwner, name))(timeout).mapTo[ActorRef]
@@ -89,11 +74,13 @@ object ConnectionOwner {
  * @param password
  * @param name
  * @param reconnectionDelay
- * @param system
+ * @param actorRefFactory
  */
 class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: String = "/", user: String = "guest", password: String =
-  "guest", name: String, reconnectionDelay: FiniteDuration = 10000 millis)(implicit actorRefFactory: ActorRefFactory) {
+"guest", name: String, reconnectionDelay: FiniteDuration = 10000 millis)(implicit actorRefFactory: ActorRefFactory) {
+
   import ConnectionOwner._
+
   lazy val owner = actorRefFactory.actorOf(Props(new ConnectionOwner(buildConnFactory(host = host, port = port, vhost = vhost, user = user, password = password), reconnectionDelay)), name = name)
 
   def waitForConnection = Amqp.waitForConnection(actorRefFactory, owner)
@@ -105,22 +92,22 @@ class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: St
     Await.result(future, timeout.duration)
   }
 
-  def createChannelOwner(channelParams: Option[ChannelParameters] = None) = createChild(Props(new ChannelOwner(channelParams)))
+  def createChannelOwner(channelParams: Option[ChannelParameters] = None) = createChild(Props(new ChannelOwner(channelParams = channelParams)))
 
   def createConsumer(bindings: List[Binding], listener: ActorRef, channelParams: Option[ChannelParameters], autoack: Boolean) = {
-    createChild(Props(new Consumer(bindings, Some(listener), channelParams, autoack)))
+    createChild(Consumer.props(Some(listener), autoack, bindings.map(b => AddBinding(b)), channelParams))
   }
 
   def createConsumer(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, listener: ActorRef, channelParams: Option[ChannelParameters] = None, autoack: Boolean = false) = {
-    createChild(Props(new Consumer(List(Binding(exchange, queue, routingKey)), Some(listener), channelParams, autoack)))
+    createChild(Consumer.props(listener, exchange, queue, routingKey, channelParams, autoack))
   }
 
   def createRpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters]) = {
-    createChild(Props(new RpcServer(bindings, processor, channelParams)), None)
+    createChild(Props(new RpcServer(processor, bindings.map(b => AddBinding(b)), channelParams)), None)
   }
 
   def createRpcServer(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters]) = {
-    createChild(Props(new RpcServer(List(Binding(exchange, queue, routingKey)), processor, channelParams)), None)
+    createChild(Props(new RpcServer(processor, List(AddBinding(Binding(exchange, queue, routingKey))), channelParams)), None)
   }
 
   def createRpcClient() = {
@@ -144,7 +131,13 @@ class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: St
  * @param reconnectionDelay delay between reconnection attempts
  */
 class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteDuration = 10000 millis) extends Actor with FSM[ConnectionOwner.State, ConnectionOwner.Data] {
+
   import ConnectionOwner._
+
+  override def preStart() {
+    self ! 'connect
+  }
+
   startWith(Disconnected, Uninitialized)
 
   /**
@@ -177,6 +170,7 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteD
         case e: IOException => {
           log.error(e, "cannot connect to {}, retrying in {}", connFactory, reconnectionDelay)
           setTimer("reconnect", 'connect, reconnectionDelay, true)
+          stay()
         }
       }
     }
@@ -198,16 +192,15 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteD
     /*
      * channel request. send back a channel
      */
-    case Event(CreateChannel, Connected(conn)) => stay replying conn.createChannel()
+    case Event(CreateChannel, Connected(conn)) => Try(conn.createChannel()) match {
+      case Success(channel) => stay replying channel
+      case Failure(cause) => goto(Disconnected) using Uninitialized
+    }
     /*
      * create a "channel aware" actor that will request channels from this connection actor
      */
     case Event(Create(props, name), Connected(conn)) => {
-      val channel = conn.createChannel()
       val child = createChild(props, name)
-      log.debug("creating child {} with channel {}", child, channel)
-      // send a channel to the kid
-      child ! channel
       stay replying child
     }
     /*
@@ -216,10 +209,9 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteD
     case Event(Shutdown(cause), _) => {
       if (!cause.isInitiatedByApplication) {
         log.error(cause.toString)
-        self ! 'connect
         context.children.foreach(_ ! Shutdown(cause))
       }
-      goto(Disconnected) using (Uninitialized)
+      goto(Disconnected) using Uninitialized
     }
   }
 
@@ -231,7 +223,10 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteD
         case _ => {}
       }
     }
-    case Connected -> Disconnected => log.warning("lost connection to " + toUri(connFactory))
+    case Connected -> Disconnected => {
+      log.warning("lost connection to " + toUri(connFactory))
+      self ! 'connect
+    }
   }
 
   onTermination {
@@ -241,8 +236,6 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteD
     }
   }
 
-  override def preStart() {
-    self ! 'connect
-  }
+  initialize
 }
 

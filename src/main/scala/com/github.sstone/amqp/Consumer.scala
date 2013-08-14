@@ -1,38 +1,28 @@
 package com.github.sstone.amqp
 
 import Amqp._
-import akka.actor.ActorRef
+import akka.actor.{Props, ActorRef}
 import com.rabbitmq.client.{Envelope, Channel, DefaultConsumer}
 import com.rabbitmq.client.AMQP.BasicProperties
 
+object Consumer {
+  def props(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None): Props =
+    Props(new Consumer(listener, autoack, init, channelParams))
+
+  def props(listener: ActorRef, exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, channelParams: Option[ChannelParameters], autoack: Boolean): Props =
+    props(Some(listener), init = List(AddBinding(Binding(exchange, queue, routingKey))), channelParams = channelParams, autoack = autoack)
+}
+
 /**
  * Create an AMQP consumer, which takes a list of AMQP bindings, a listener to forward messages to, and optional channel parameters.
- * For each (Exchange, Queue, RoutingKey) biding, the consumer will:
- * <ul>
- *   <li>declare the exchange</li>
- *   <li>declare the queue</li>
- *   <li>bind the queue to the routing key on the exchange</li>
- *   <li>consume messages from the queue</li>
- *   <li>forward them to the listener actor, wrapped in a [[com.github.sstone.amqp.Amqp.Delivery]] instance</li>
- * </ul>
- * @param bindings list of bindings
  * @param listener optional listener actor; if not set, self will be used instead
  * @param channelParams optional channel parameters
  */
-class Consumer(bindings: List[Binding], listener: Option[ActorRef], channelParams: Option[ChannelParameters] = None, autoack: Boolean = false) extends ChannelOwner(channelParams) {
-  def this(bindings: List[Binding], listener: ActorRef, channelParams: Option[ChannelParameters]) = this(bindings, Some(listener), channelParams)
-
-  def this(bindings: List[Binding], listener: ActorRef) = this(bindings, Some(listener))
-
+class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None) extends ChannelOwner(init, channelParams) {
+  import ChannelOwner._
+  // consumer tag -> queue map
+  val consumerTags = scala.collection.mutable.HashMap.empty[String, String]
   var consumer: Option[DefaultConsumer] = None
-
-  private def setupBinding(consumer: DefaultConsumer, binding: Binding) = {
-    val channel = consumer.getChannel
-    val queueName = declareQueue(channel, binding.queue).getQueue
-    declareExchange(channel, binding.exchange)
-    channel.queueBind(queueName, binding.exchange.name, binding.routingKey)
-    channel.basicConsume(queueName, autoack, consumer)
-  }
 
   override def onChannel(channel: Channel) {
     val destination = listener getOrElse self
@@ -41,6 +31,35 @@ class Consumer(bindings: List[Binding], listener: Option[ActorRef], channelParam
         destination ! Delivery(consumerTag, envelope, properties, body)
       }
     })
-    bindings.foreach(b => setupBinding(consumer.get, b))
+    consumerTags.clear()
+  }
+
+  when(Connected) {
+    /**
+     * add a queue to our consumer
+     */
+    case Event(request@AddQueue(queue), Connected(channel)) => {
+      log.debug("processing %s".format(request))
+      stay replying withChannel(channel, request)(c => {
+        val queueName = declareQueue(c, queue).getQueue
+        val consumerTag = c.basicConsume(queueName, autoack, consumer.get)
+        consumerTags.put(consumerTag, queueName)
+        consumerTag
+      })
+    }
+
+    /**
+     * add a binding to our consumer: declare the queue, bind it, and consume from it
+     */
+    case Event(request@AddBinding(binding), Connected(channel)) => {
+      log.debug("processing %s".format(request))
+      stay replying withChannel(channel, request)(c => {
+        val queueName = declareQueue(c, binding.queue).getQueue
+        c.queueBind(queueName, binding.exchange.name, binding.routingKey)
+        val consumerTag = c.basicConsume(queueName, autoack, consumer.get)
+        consumerTags.put(consumerTag, queueName)
+        consumerTag
+      })
+    }
   }
 }

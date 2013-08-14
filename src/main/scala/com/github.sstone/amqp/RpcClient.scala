@@ -1,23 +1,34 @@
 package com.github.sstone.amqp
 
-import akka.actor.ActorRef
-import Amqp._
+import akka.actor.{Props, ActorRef}
+import com.github.sstone.amqp.Amqp._
 import com.rabbitmq.client.{Envelope, Channel, DefaultConsumer}
 import com.rabbitmq.client.AMQP.BasicProperties
+import com.github.sstone.amqp.Amqp.ReturnedMessage
+import com.github.sstone.amqp.Amqp.Publish
+import com.github.sstone.amqp.Amqp.ChannelParameters
+import scala.Some
+import com.github.sstone.amqp.Amqp.QueueParameters
+import com.github.sstone.amqp.Amqp.Delivery
 
 object RpcClient {
-
-  private[amqp] case class RpcResult(destination: ActorRef, expected: Int, deliveries: scala.collection.mutable.ListBuffer[Delivery])
-
   case class Request(publish: List[Publish], numberOfResponses: Int = 1)
+
+  object Request {
+    def apply(publish: Publish) = new Request(List(publish), 1)
+  }
 
   case class Response(deliveries: List[Delivery])
 
   case class Undelivered(msg: ReturnedMessage)
 
+  def props(channelParams: Option[ChannelParameters] = None): Props = Props(new RpcClient(channelParams))
+
+  private[amqp] case class RpcResult(destination: ActorRef, expected: Int, deliveries: scala.collection.mutable.ListBuffer[Delivery])
+
 }
 
-class RpcClient(channelParams: Option[ChannelParameters] = None) extends ChannelOwner(channelParams) {
+class RpcClient(channelParams: Option[ChannelParameters] = None) extends ChannelOwner(channelParams = channelParams) {
 
   import RpcClient._
 
@@ -39,12 +50,7 @@ class RpcClient(channelParams: Option[ChannelParameters] = None) extends Channel
   }
 
   when(ChannelOwner.Connected) {
-    case Event(Publish(exchange, key, body, properties, mandatory, immediate), ChannelOwner.Connected(channel)) => {
-      val props = properties.getOrElse(new BasicProperties()).builder.build()
-      channel.basicPublish(exchange, key, mandatory, immediate, props, body)
-      stay
-    }
-    case Event(Request(publish, numberOfResponses), ChannelOwner.Connected(channel)) => {
+     case Event(Request(publish, numberOfResponses), ChannelOwner.Connected(channel)) => {
       counter = counter + 1
       publish.foreach(p => {
         val props = p.properties.getOrElse(new BasicProperties()).builder.correlationId(counter.toString).replyTo(queue).build()

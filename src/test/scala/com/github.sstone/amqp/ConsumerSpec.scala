@@ -10,6 +10,7 @@ import com.github.sstone.amqp.Amqp.Publish
 import com.github.sstone.amqp.Amqp.ExchangeParameters
 import com.github.sstone.amqp.Amqp.Binding
 import com.github.sstone.amqp.Amqp.QueueParameters
+import com.rabbitmq.client.AMQP.Queue
 
 @RunWith(classOf[JUnitRunner])
 class ConsumerSpec extends ChannelSpec {
@@ -18,9 +19,12 @@ class ConsumerSpec extends ChannelSpec {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "", passive = false, exclusive = true)
       val probe = TestProbe()
-      val consumer = ConnectionOwner.createActor(conn, Props(new Consumer(List(Binding(exchange, queue, "my_key")), probe.ref)), 5000.millis)
-      val producer = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
+      val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(listener = Some(probe.ref)), timeout = 5000 millis)
+      val producer = ConnectionOwner.createChildActor(conn, ChannelOwner.props())
       waitForConnection(system, consumer, producer).await()
+      consumer ! AddBinding(Binding(exchange, queue, "my_key"))
+      val check = receiveOne(1 second)
+      println(check)
       val message = "yo!".getBytes
       producer ! Publish(exchange.name, "my_key", message)
       probe.expectMsgClass(1.second, classOf[Delivery])

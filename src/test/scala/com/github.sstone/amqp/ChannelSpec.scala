@@ -19,14 +19,12 @@ class ChannelSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec with 
   var channelOwner: ActorRef = _
 
   before {
-    println("before")
     conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
-    channelOwner = ConnectionOwner.createActor(conn, Props(new ChannelOwner()))
+    channelOwner = ConnectionOwner.createChildActor(conn, ChannelOwner.props())
     waitForConnection(system, conn, channelOwner).await(5, TimeUnit.SECONDS)
   }
 
   after {
-    println("after")
-    Await.result(gracefulStop(conn, 5 seconds)(system), 6 seconds)
+    Await.result(gracefulStop(conn, 5 seconds), 6 seconds)
   }
 }
