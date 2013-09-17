@@ -136,7 +136,7 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
       stay replying withChannel(channel, request) {
         c => {
           c.txSelect()
-          publish.foreach(p => c.basicPublish(p.exchange, p.key, p.mandatory, p.immediate, new AMQP.BasicProperties.Builder().build(), p.body))
+          publish.foreach(p => c.basicPublish(p.exchange, p.key, p.mandatory, p.immediate, p.properties getOrElse new AMQP.BasicProperties.Builder().build(), p.body))
           c.txCommit()
         }
       }

@@ -35,7 +35,6 @@ class ProducerSpec extends ChannelSpec {
       val message = "yo!".getBytes
       producer ! Publish(exchange.name, "my_key", message, Some(new BasicProperties.Builder().contentType("my content").build()))
 
-
       val delivery = probe.receiveOne(1.second).asInstanceOf[Delivery]
       assert(delivery.properties.getContentType === "my content")
     }
@@ -56,13 +55,18 @@ class ProducerSpec extends ChannelSpec {
       }
 
       val message = "yo!".getBytes
-      producer ! Transaction(List(Publish(exchange.name, "my_key", message), Publish(exchange.name, "my_key", message), Publish(exchange.name, "my_key", message)))
+      val props = new BasicProperties.Builder().contentType("my content").contentEncoding("my encoding").build()
+      producer ! Transaction(List(Publish(exchange.name, "my_key", message, properties = Some(props)), Publish(exchange.name, "my_key", message, properties = Some(props)), Publish(exchange.name, "my_key", message, properties = Some(props))))
 
       var received = List[Delivery]()
       probe.receiveWhile(2.seconds) {
         case message: Delivery => received = message :: received
       }
       assert(received.length === 3)
+      received.foreach(m => {
+        assert(m.properties.getContentEncoding === "my encoding")
+        assert(m.properties.getContentType === "my content")
+      })
     }
   }
 }
