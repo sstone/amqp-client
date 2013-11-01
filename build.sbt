@@ -17,6 +17,8 @@ libraryDependencies <<= scalaVersion { scala_version =>
         "com.rabbitmq"         % "amqp-client"          % "3.1.1",
         "com.typesafe.akka"    %% "akka-testkit"        % akkaVersion  % "test",
         "org.scalatest"        %% "scalatest"           % "1.9.1" % "test",
-        "junit"           	   % "junit"                % "4.11" % "test"
+        "junit"           	   % "junit"                % "4.11" % "test",
+        "com.typesafe.akka"    %  "akka-slf4j_2.10"     % akkaVersion,
+        "ch.qos.logback"       %  "logback-classic"     % "1.0.0"
     )
 }

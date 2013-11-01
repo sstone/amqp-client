@@ -7,9 +7,9 @@ import java.io.IOException
 import akka.util.Timeout
 import akka.actor._
 import akka.pattern.ask
-import com.rabbitmq.client.{Connection, ShutdownSignalException, ShutdownListener, ConnectionFactory}
+import com.rabbitmq.client.{Connection, ShutdownSignalException, ShutdownListener, ConnectionFactory, Address => RMQAddress}
 import Amqp._
-
+import java.util.concurrent.ExecutorService
 
 
 object ConnectionOwner {
@@ -22,7 +22,8 @@ object ConnectionOwner {
 
   case class Create(props: Props, name: Option[String] = None)
 
-  def props(connFactory: ConnectionFactory, reconnectionDelay: FiniteDuration = 10000 millis) : Props = Props(new ConnectionOwner(connFactory, reconnectionDelay))
+  def props(connFactory: ConnectionFactory, reconnectionDelay: FiniteDuration = 10000 millis,
+             executor: Option[ExecutorService] = None, addresses: Option[Array[RMQAddress]] = None) : Props = Props(new ConnectionOwner(connFactory, reconnectionDelay, executor, addresses))
 
   private[amqp] sealed trait Data
 
@@ -74,14 +75,18 @@ object ConnectionOwner {
  * @param password
  * @param name
  * @param reconnectionDelay
+ * @param executor alternative ThreadPool for consumer threads (http://www.rabbitmq.com/api-guide.html#consumer-thread-pool)
+ * @param addresses List of alternative addresses for a HA RabbitMQ cluster (http://www.rabbitmq.com/api-guide.html#address-array)
  * @param actorRefFactory
  */
 class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: String = "/", user: String = "guest", password: String =
-"guest", name: String, reconnectionDelay: FiniteDuration = 10000 millis)(implicit actorRefFactory: ActorRefFactory) {
+"guest", name: String, reconnectionDelay: FiniteDuration = 10000 millis, executor: Option[ExecutorService] = None,
+addresses: Option[Array[RMQAddress]] = None)(implicit actorRefFactory: ActorRefFactory) {
 
   import ConnectionOwner._
 
-  lazy val owner = actorRefFactory.actorOf(Props(new ConnectionOwner(buildConnFactory(host = host, port = port, vhost = vhost, user = user, password = password), reconnectionDelay)), name = name)
+  lazy val owner = actorRefFactory.actorOf(Props(new ConnectionOwner(buildConnFactory(host = host, port = port, vhost = vhost, user = user, password = password),
+    reconnectionDelay, executor, addresses)), name = name)
 
   def waitForConnection = Amqp.waitForConnection(actorRefFactory, owner)
 
@@ -130,7 +135,8 @@ class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: St
  * @param connFactory connection factory
  * @param reconnectionDelay delay between reconnection attempts
  */
-class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteDuration = 10000 millis) extends Actor with FSM[ConnectionOwner.State, ConnectionOwner.Data] {
+class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteDuration = 10000 millis,
+                      executor: Option[ExecutorService] = None, addresses: Option[Array[RMQAddress]] = None) extends Actor with FSM[ConnectionOwner.State, ConnectionOwner.Data] {
 
   import ConnectionOwner._
 
@@ -157,7 +163,12 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteD
   when(Disconnected) {
     case Event('connect, _) => {
       try {
-        val conn = connFactory.newConnection()
+        val conn = (executor, addresses) match {
+          case (None, None) => connFactory.newConnection()
+          case (Some(ex), None) => connFactory.newConnection(ex)
+          case (None, Some(addr)) => connFactory.newConnection(addr)
+          case (Some(ex), Some(addr)) => connFactory.newConnection(ex, addr)
+        }
         conn.addShutdownListener(new ShutdownListener {
           def shutdownCompleted(cause: ShutdownSignalException) {
             self ! Shutdown(cause)
