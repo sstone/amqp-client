@@ -10,7 +10,7 @@ import akka.pattern.gracefulStop
 import akka.util.Timeout
 import concurrent.duration._
 import concurrent.Await
-import com.rabbitmq.client.Channel
+import com.rabbitmq.client.{Address, Channel}
 import ConnectionOwner.CreateChannel
 
 @RunWith(classOf[JUnitRunner])
@@ -20,6 +20,21 @@ class ConnectionOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSp
   "ConnectionOwner" should {
     "provide channels for many child actors" in {
       val conn = new RabbitMQConnection(vhost = "/", name = "conn")
+      conn.waitForConnection.await()
+      val actors = 1000
+      for (i <- 0 until actors) {
+        val p = TestProbe()
+        p.send(conn.owner, CreateChannel)
+        p.expectMsgClass(2.second, classOf[Channel])
+      }
+      Await.result(gracefulStop(conn.owner, 5 seconds), 6 seconds)
+    }
+    "connect even if the default host is unavailable" in {
+      val conn = new RabbitMQConnection(host = "fake-host", vhost = "/", name = "conn",
+        addresses = Some( Array(
+          new Address("another.fake.host"),
+          new Address("localhost")
+        )))
       conn.waitForConnection.await()
       val actors = 1000
       for (i <- 0 until actors) {
