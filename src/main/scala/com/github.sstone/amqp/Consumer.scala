@@ -7,7 +7,7 @@ import com.rabbitmq.client.AMQP.BasicProperties
 
 object Consumer {
   def props(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None): Props =
-    Props(new Consumer(listener, autoack, init, channelParams))
+    Props(classOf[Consumer], listener, autoack, init, channelParams)
 
   def props(listener: ActorRef, exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, channelParams: Option[ChannelParameters], autoack: Boolean): Props =
     props(Some(listener), init = List(AddBinding(Binding(exchange, queue, routingKey))), channelParams = channelParams, autoack = autoack)

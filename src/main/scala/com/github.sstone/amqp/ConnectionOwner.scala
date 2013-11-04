@@ -22,8 +22,9 @@ object ConnectionOwner {
 
   case class Create(props: Props, name: Option[String] = None)
 
-  def props(connFactory: ConnectionFactory, reconnectionDelay: FiniteDuration = 10000 millis,
-             executor: Option[ExecutorService] = None, addresses: Option[Array[RMQAddress]] = None) : Props = Props(new ConnectionOwner(connFactory, reconnectionDelay, executor, addresses))
+  def props(connFactory: ConnectionFactory, reconnectionDelay: FiniteDuration = 10000.millis,
+             executor: Option[ExecutorService] = None, addresses: Option[Array[RMQAddress]] = None) : Props =
+    Props(classOf[ConnectionOwner], connFactory, reconnectionDelay, executor, addresses)
 
   private[amqp] sealed trait Data
 
@@ -68,36 +69,39 @@ object ConnectionOwner {
 
 /**
  * Helper class that encapsulates a connection owner so that it is easier to manipulate
- * @param host
- * @param port
- * @param vhost
- * @param user
- * @param password
- * @param name
- * @param reconnectionDelay
+ * @param host RabbitMQ Host. Default value from com.rabbitmq.ConnectionFactory is used if undefined
+ * @param port RabbitMQ Port. Default value from com.rabbitmq.ConnectionFactory is used if undefined
+ * @param vhost RabbitMQ Virtual Host.  Default value from com.rabbitmq.ConnectionFactory is used if undefined
+ * @param user RabbitMQ User name.  Default value from com.rabbitmq.ConnectionFactory is used if undefined
+ * @param password RabbitMQ User password.  Default value from com.rabbitmq.ConnectionFactory is used if undefined
+ * @param name name of a ConnectionOwner actor
+ * @param reconnectionDelay Period to reconnect
  * @param executor alternative ThreadPool for consumer threads (http://www.rabbitmq.com/api-guide.html#consumer-thread-pool)
  * @param addresses List of alternative addresses for a HA RabbitMQ cluster (http://www.rabbitmq.com/api-guide.html#address-array)
- * @param actorRefFactory
+ * @param actorRefFactory Actor factory: System or Context
  */
-class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: String = "/", user: String = "guest", password: String =
-"guest", name: String, reconnectionDelay: FiniteDuration = 10000 millis, executor: Option[ExecutorService] = None,
+class RabbitMQConnection(host: String = ConnectionFactory.DEFAULT_HOST, port: Int = ConnectionFactory.DEFAULT_AMQP_PORT,
+                         vhost: String = ConnectionFactory.DEFAULT_VHOST, user: String = ConnectionFactory.DEFAULT_USER,
+                         password: String = ConnectionFactory.DEFAULT_PASS, name: String,
+                         reconnectionDelay: FiniteDuration = 10000.millis, executor: Option[ExecutorService] = None,
 addresses: Option[Array[RMQAddress]] = None)(implicit actorRefFactory: ActorRefFactory) {
 
   import ConnectionOwner._
 
-  lazy val owner = actorRefFactory.actorOf(Props(new ConnectionOwner(buildConnFactory(host = host, port = port, vhost = vhost, user = user, password = password),
-    reconnectionDelay, executor, addresses)), name = name)
+  lazy val owner = actorRefFactory.actorOf(
+    Props(classOf[ConnectionOwner], buildConnFactory(host = host, port = port, vhost = vhost, user = user, password = password),
+    reconnectionDelay, executor, addresses), name = name)
 
   def waitForConnection = Amqp.waitForConnection(actorRefFactory, owner)
 
-  def stop = actorRefFactory.stop(owner)
+  def stop() = actorRefFactory.stop(owner)
 
   def createChild(props: Props, name: Option[String] = None, timeout: Timeout = 5000.millis): ActorRef = {
     val future = owner.ask(Create(props, name))(timeout).mapTo[ActorRef]
     Await.result(future, timeout.duration)
   }
 
-  def createChannelOwner(channelParams: Option[ChannelParameters] = None) = createChild(Props(new ChannelOwner(channelParams = channelParams)))
+  def createChannelOwner(channelParams: Option[ChannelParameters] = None) = createChild(Props(classOf[ChannelOwner], channelParams))
 
   def createConsumer(bindings: List[Binding], listener: ActorRef, channelParams: Option[ChannelParameters], autoack: Boolean) = {
     createChild(Consumer.props(Some(listener), autoack, bindings.map(b => AddBinding(b)), channelParams))
@@ -108,15 +112,15 @@ addresses: Option[Array[RMQAddress]] = None)(implicit actorRefFactory: ActorRefF
   }
 
   def createRpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters]) = {
-    createChild(Props(new RpcServer(processor, bindings.map(b => AddBinding(b)), channelParams)), None)
+    createChild(Props(classOf[RpcServer], processor, bindings.map(b => AddBinding(b)), channelParams), None)
   }
 
   def createRpcServer(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters]) = {
-    createChild(Props(new RpcServer(processor, List(AddBinding(Binding(exchange, queue, routingKey))), channelParams)), None)
+    createChild(Props(classOf[RpcServer], processor, List(AddBinding(Binding(exchange, queue, routingKey))), channelParams), None)
   }
 
   def createRpcClient() = {
-    createChild(Props(new RpcClient()))
+    createChild(Props[RpcClient])
   }
 
 }
@@ -135,8 +139,9 @@ addresses: Option[Array[RMQAddress]] = None)(implicit actorRefFactory: ActorRefF
  * @param connFactory connection factory
  * @param reconnectionDelay delay between reconnection attempts
  */
-class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteDuration = 10000 millis,
-                      executor: Option[ExecutorService] = None, addresses: Option[Array[RMQAddress]] = None) extends Actor with FSM[ConnectionOwner.State, ConnectionOwner.Data] {
+class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteDuration = 10000.millis,
+                      executor: Option[ExecutorService] = None, addresses: Option[Array[RMQAddress]] = None)
+  extends Actor with FSM[ConnectionOwner.State, ConnectionOwner.Data] {
 
   import ConnectionOwner._
 
@@ -175,12 +180,12 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteD
           }
         })
         cancelTimer("reconnect")
-        goto(Connected) using (Connected(conn))
+        goto(Connected) using Connected(conn)
       }
       catch {
         case e: IOException => {
           log.error(e, "cannot connect to {}, retrying in {}", connFactory, reconnectionDelay)
-          setTimer("reconnect", 'connect, reconnectionDelay, true)
+          setTimer("reconnect", 'connect, reconnectionDelay, repeat = true)
           stay()
         }
       }
@@ -196,7 +201,7 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteD
     /*
      * when disconnected, ignore channel request. Another option would to send back something like None...
      */
-    case Event(CreateChannel, _) => stay
+    case Event(CreateChannel, _) => stay()
   }
 
   when(Connected) {
@@ -247,6 +252,6 @@ class ConnectionOwner(connFactory: ConnectionFactory, reconnectionDelay: FiniteD
     }
   }
 
-  initialize
+  initialize()
 }
 

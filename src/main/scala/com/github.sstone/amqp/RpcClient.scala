@@ -22,7 +22,7 @@ object RpcClient {
 
   case class Undelivered(msg: ReturnedMessage)
 
-  def props(channelParams: Option[ChannelParameters] = None): Props = Props(new RpcClient(channelParams))
+  def props(channelParams: Option[ChannelParameters] = None): Props = Props(classOf[RpcClient], channelParams)
 
   private[amqp] case class RpcResult(destination: ActorRef, expected: Int, deliveries: scala.collection.mutable.ListBuffer[Delivery])
 
@@ -59,7 +59,7 @@ class RpcClient(channelParams: Option[ChannelParameters] = None) extends Channel
       if (numberOfResponses > 0) {
         correlationMap += (counter.toString -> RpcResult(sender, numberOfResponses, collection.mutable.ListBuffer.empty[Delivery]))
       }
-      stay
+      stay()
     }
     case Event(delivery@Delivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]), ChannelOwner.Connected(channel)) => {
       channel.basicAck(envelope.getDeliveryTag, false)
@@ -73,7 +73,7 @@ class RpcClient(channelParams: Option[ChannelParameters] = None) extends Channel
         }
         case None => log.warning("unexpected message with correlation id " + properties.getCorrelationId)
       }
-      stay
+      stay()
     }
     case Event(msg@ReturnedMessage(replyCode, replyText, exchange, routingKey, properties, body), ChannelOwner.Connected(channel)) => {
       correlationMap.get(properties.getCorrelationId) match {
@@ -83,7 +83,7 @@ class RpcClient(channelParams: Option[ChannelParameters] = None) extends Channel
         }
         case None => log.warning("unexpected returned message with correlation id " + properties.getCorrelationId)
       }
-      stay
+      stay()
     }
   }
 }

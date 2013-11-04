@@ -145,6 +145,18 @@ object Amqp {
    */
   case class ReturnedMessage(replyCode: Int, replyText: String, exchange: String, routingKey: String, properties: BasicProperties, body: Array[Byte])
 
+  class ConnectionActor(onConnected: () => Unit) extends Actor {
+    def receive = {
+      case Transition(_, ChannelOwner.Disconnected, ChannelOwner.Connected)
+           | Transition(_, ConnectionOwner.Disconnected, ConnectionOwner.Connected)
+           | CurrentState(_, ConnectionOwner.Connected)
+           | CurrentState(_, ChannelOwner.Connected) => {
+        onConnected()
+        context.stop(self)
+      }
+    }
+  }
+
   /**executes a callback when a connection or channel actors is "connected" i.e. usable
    * <ul>
    * <li>for a connection actor, connected means that it is connected to the AMQP broker</li>
@@ -157,17 +169,8 @@ object Amqp {
    * @param onConnected connection callback
    */
   def onConnection(actorRefFactory: ActorRefFactory, channelOrConnectionActor: ActorRef, onConnected: () => Unit) = {
-    val m = actorRefFactory.actorOf(Props(new Actor {
-      def receive = {
-        case Transition(_, ChannelOwner.Disconnected, ChannelOwner.Connected)
-             | Transition(_, ConnectionOwner.Disconnected, ConnectionOwner.Connected)
-             | CurrentState(_, ConnectionOwner.Connected)
-             | CurrentState(_, ChannelOwner.Connected) => {
-          onConnected()
-          context.stop(self)
-        }
-      }
-    }))
+
+    val m = actorRefFactory.actorOf(Props(classOf[ConnectionActor], onConnected))
     channelOrConnectionActor ! SubscribeTransitionCallBack(m)
   }
 
