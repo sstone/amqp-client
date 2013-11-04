@@ -37,7 +37,8 @@ object RpcServer {
     def onFailure(delivery: Delivery, e: Throwable): ProcessResult
   }
 
-  def props(processor: RpcServer.IProcessor, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None): Props = Props(new RpcServer(processor, init, channelParams))
+  def props(processor: RpcServer.IProcessor, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None): Props =
+    Props(classOf[RpcServer], processor, init, channelParams)
 
   def props(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, proc: RpcServer.IProcessor, channelParams: ChannelParameters): Props =
     props(processor = proc, init = List(AddBinding(Binding(exchange, queue, routingKey))), channelParams = Some(channelParams))
@@ -66,7 +67,7 @@ class RpcServer(processor: RpcServer.IProcessor, init: Seq[Request] = Seq.empty[
   private def sendResponse(result: ProcessResult, properties: BasicProperties, channel: Channel) {
     result match {
       // send a reply only if processor return something *and* replyTo is set
-      case ProcessResult(Some(data), customProperties) if (properties.getReplyTo != null) => {
+      case ProcessResult(Some(data), customProperties) if properties.getReplyTo != null => {
         // publish the response with the same correlation id as the request
         val props = customProperties.getOrElse(new BasicProperties()).builder().correlationId(properties.getCorrelationId).build()
         channel.basicPublish("", properties.getReplyTo, true, false, props, data)
@@ -100,7 +101,7 @@ class RpcServer(processor: RpcServer.IProcessor, init: Seq[Request] = Seq.empty[
           }
         }
       }
-      stay
+      stay()
     }
   }
 }

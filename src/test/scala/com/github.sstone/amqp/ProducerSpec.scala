@@ -12,6 +12,14 @@ import com.github.sstone.amqp.Amqp.ExchangeParameters
 import com.github.sstone.amqp.Amqp.Binding
 import com.github.sstone.amqp.Amqp.QueueParameters
 import com.github.sstone.amqp.Amqp.Delivery
+import scala.collection.JavaConverters._
+import com.github.sstone.amqp.Amqp.Transaction
+import com.github.sstone.amqp.Amqp.Publish
+import com.github.sstone.amqp.Amqp.AddBinding
+import com.github.sstone.amqp.Amqp.Binding
+import scala.Some
+import com.github.sstone.amqp.Amqp.QueueParameters
+import com.github.sstone.amqp.Amqp.Delivery
 
 @RunWith(classOf[JUnitRunner])
 class ProducerSpec extends ChannelSpec {
@@ -20,7 +28,7 @@ class ProducerSpec extends ChannelSpec {
       val exchange = StandardExchanges.amqDirect
       val queue = QueueParameters(name = "queue", passive = false, exclusive = false)
       val probe = TestProbe()
-      val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(listener = Some(probe.ref)), timeout = 5000 millis)
+      val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(listener = Some(probe.ref)), timeout = 5000.millis)
       val producer = ConnectionOwner.createChildActor(conn, ChannelOwner.props())
       waitForConnection(system, conn, consumer, producer).await()
 
@@ -42,7 +50,7 @@ class ProducerSpec extends ChannelSpec {
       val exchange = StandardExchanges.amqDirect
       val queue = QueueParameters(name = "queue", passive = false, exclusive = false)
       val probe = TestProbe()
-      val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(listener = Some(probe.ref)), timeout = 5000 millis)
+      val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(listener = Some(probe.ref)), timeout = 5000.millis)
       val producer = ConnectionOwner.createChildActor(conn, ChannelOwner.props())
       waitForConnection(system, conn, consumer, producer).await()
 
@@ -55,14 +63,17 @@ class ProducerSpec extends ChannelSpec {
       }
 
       val message = "yo!".getBytes
-      val props = new BasicProperties.Builder().contentType("my content").contentEncoding("my encoding").build()
-      producer ! Transaction(List(Publish(exchange.name, "my_key", message, properties = Some(props)), Publish(exchange.name, "my_key", message, properties = Some(props)), Publish(exchange.name, "my_key", message, properties = Some(props))))
+      val props = new BasicProperties.Builder().contentType("my content").contentEncoding("my encoding")
+      producer ! Transaction(List(
+        Publish(exchange.name, "my_key", message, properties = Some(props.messageId("1").build())),
+        Publish(exchange.name, "my_key", message, properties = Some(props.messageId("2").build())),
+        Publish(exchange.name, "my_key", message, properties = Some(props.messageId("3").build()))
+      ))
 
-      var received = List[Delivery]()
-      probe.receiveWhile(2.seconds) {
-        case message: Delivery => received = message :: received
+      val received = probe.receiveWhile(2.seconds) {
+        case message: Delivery => message
       }
-      assert(received.length === 3)
+      assert(received.count(r => r.properties.getMessageId != null) === 3, s"Expected length of $received to be 3")
       received.foreach(m => {
         assert(m.properties.getContentEncoding === "my encoding")
         assert(m.properties.getContentType === "my content")

@@ -4,7 +4,6 @@ import collection.JavaConversions._
 import com.rabbitmq.client.AMQP.BasicProperties
 import com.rabbitmq.client._
 import akka.actor.{Props, Actor, FSM}
-import java.io.IOException
 import com.github.sstone.amqp.ConnectionOwner.{CreateChannel, Shutdown}
 import com.github.sstone.amqp.Amqp._
 import scala.util.{Try, Failure, Success}
@@ -17,7 +16,8 @@ object ChannelOwner {
 
   case object Connected extends State
 
-  def props(init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None): Props = Props(new ChannelOwner(init, channelParams))
+  def props(init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None): Props =
+    Props(classOf[ChannelOwner], init, channelParams)
 
   private[amqp] sealed trait Data
 
@@ -45,7 +45,7 @@ object ChannelOwner {
 /**
  * Channel owners are created by connection owners and hold an AMQP channel which is used to do
  * basically everything: create queues and bindings, publish messages, consume messages...
- * @param channelParams
+ * @param channelParams Optional parameters to configure a channel: qos, etc.
  */
 class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None) extends Actor with FSM[ChannelOwner.State, ChannelOwner.Data] {
 
@@ -208,5 +208,5 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
     }
   }
 
-  initialize
+  initialize()
 }
