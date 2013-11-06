@@ -177,6 +177,10 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
       log.debug("unbinding queue {} to key {} on exchange {}", queue, routingKey, exchange)
       stay replying withChannel(channel, request)(c => c.queueUnbind(queue, exchange, routingKey, args))
     }
+    case Event(request@Get(queue, autoAck), Connected(channel)) => {
+      log.debug("getting from queue {} autoAck {}", queue, autoAck)
+      stay replying withChannel(channel, request)(c => c.basicGet(queue, autoAck))
+    }
   }
 
   whenUnhandled {

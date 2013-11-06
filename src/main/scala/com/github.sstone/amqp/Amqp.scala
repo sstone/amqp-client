@@ -110,6 +110,8 @@ object Amqp {
 
   case class Record(request: Request) extends Request
 
+  case class Get(queue: String, autoAck: Boolean) extends Request
+
   /**
    * sent back by a publisher when the request was processed successfully
    * @param request original request
