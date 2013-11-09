@@ -8,6 +8,7 @@ import java.util.concurrent.TimeUnit
 import concurrent.duration._
 import com.rabbitmq.client.AMQP.Queue
 import com.github.sstone.amqp.Amqp._
+import com.rabbitmq.client.GetResponse
 
 @RunWith(classOf[JUnitRunner])
 class ChannelOwnerSpec extends ChannelSpec  {
@@ -17,7 +18,7 @@ class ChannelOwnerSpec extends ChannelSpec  {
       expectMsgClass(1 second, classOf[Amqp.Error])
     }
 
-    "allow users to create, bind, purge and delete queues" in {
+    "allow users to create, bind, get from, purge and delete queues" in {
       val queue = "my_test_queue"
 
       // declare a queue, bind it to "my_test_key" on "amq.direct" and publish a message
@@ -29,6 +30,11 @@ class ChannelOwnerSpec extends ChannelSpec  {
       // check that there is 1 message in the queue
       channelOwner ! DeclareQueue(QueueParameters(queue, passive = true))
       val Amqp.Ok(_, Some(check1: Queue.DeclareOk)) = receiveOne(1 second)
+
+      // receive from the queue
+      channelOwner ! Get(queue, true)
+      val Amqp.Ok(_, Some(msg: GetResponse)) = receiveOne(1 second)
+      assert(new String(msg.getBody) == "yo!")
 
       // purge the queue
       channelOwner ! PurgeQueue(queue)
