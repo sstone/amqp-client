@@ -14,7 +14,7 @@ This client provides a simple API for
 
 It is based on the [Akka](http://akka.io/) 2.0 framework.
 
-## Limitations and compatiblity issues
+## Limitations and compatibility issues
 
 * This client is compatible with AMQP 0.9.1, not AMQP 1.0.
 * This client is most probably not easily usable from Java
@@ -27,6 +27,8 @@ So it kind of works and will be maintained for some time :-)
 
 ## Configuring maven/sbt
 
+* releases and milestones are pushed to maven central
+* snapshots are pushed to the sonatype snapshot repository
 
 ```xml
  <repositories>
@@ -40,25 +42,27 @@ So it kind of works and will be maintained for some time :-)
   <dependency>
     <groupId>com.github.sstone</groupId>
     <artifactId>amqp-client_SCALA-VERSION</artifactId>
-    <version>1.1</version>
+    <version>1.3-ML1</version>
   </dependency>
   <dependency>
     <groupId>com.typesafe.akka</groupId>
     <artifactId>akka-actor</artifactId> <!-- for Akka 2.0.X -->
-    <artifactId>akka-actor_SCALA-VERSION</artifactId> <!-- for Akka 2.1.X -->
+    <artifactId>akka-actor_SCALA-VERSION</artifactId> <!-- from Akka 2.1.X on -->
     <version>AKKA-VERSION</version>
   </dependency>
 </dependencies>
 ```
 
-Please note that the Akka dependency is now in the "provided" scope which means that you'll have to define it explicitely in your
+Please note that the Akka dependency is now in the "provided" scope which means that you'll have to define it explicitly in your
 maven/sbt projects. 
 
-The latest snapshot (development) version is 1.2-SNAPSHOT, the latest released version is 1.1
+The latest snapshot (development) version is 1.3-SNAPSHOT, the latest released version is 1.2, the latest milestone is 1.3-ML1
 
 * amqp-client 1.0 is compatible with Scala 2.9.2 and Akka 2.0.3
 * amqp-client 1.1 is compatible with Scala 2.9.2 and Akka 2.0.5
 * amqp-client 1.1 is compatible with Scala 2.10.0 and Akka 2.1.0
+* amqp-client 1.2 is compatible with Scala 2.10 and Akka 2.1
+* amqp-client 1.3 targets Scala 2.10 and Akka 2.2
 
 Support for Akka 2.2.0 is in progress (see [issue #18](https://github.com/sstone/amqp-client/issues/18))
 
