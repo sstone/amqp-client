@@ -13,6 +13,7 @@ import com.rabbitmq.client.GetResponse
 @RunWith(classOf[JUnitRunner])
 class ChannelOwnerSpec extends ChannelSpec  {
   "ChannelOwner" should {
+
     "implement basic error handling" in {
       channelOwner ! DeclareQueue(QueueParameters("no_such_queue", passive = true))
       expectMsgClass(1 second, classOf[Amqp.Error])
@@ -51,6 +52,14 @@ class ChannelOwnerSpec extends ChannelSpec  {
       assert(check1.getMessageCount === 1)
       assert(check2.getMessageCount === 0)
     }
+  }
+
+  "return unroutable messages" in {
+    channelOwner ! AddReturnListener(self)
+    val Amqp.Ok(_, None) = receiveOne(1 seconds)
+    channelOwner ! Publish("", "no_such_queue", "test".getBytes)
+    val Amqp.Ok(_, None) = receiveOne(1 seconds)
+    expectMsgClass(1 seconds, classOf[ReturnedMessage])
   }
 
   "Multiple ChannelOwners" should {

@@ -82,6 +82,10 @@ object Amqp {
 
   sealed trait Request
 
+  case class AddReturnListener(listener: ActorRef) extends Request
+
+  case class AddFlowListener(listener: ActorRef) extends Request
+
   case class DeclareQueue(queue: QueueParameters) extends Request
 
   case class DeleteQueue(name: String, ifUnused: Boolean = false, ifEmpty: Boolean = false) extends Request
@@ -111,6 +115,18 @@ object Amqp {
   case class Record(request: Request) extends Request
 
   case class Get(queue: String, autoAck: Boolean) extends Request
+
+  case object ConfirmSelect extends Request
+
+  case class WaitForConfirms(timeout: Option[Long]) extends Request
+
+  case class WaitForConfirmsOrDie(timeout: Option[Long]) extends Request
+
+  case class AddConfirmListener(listener: ActorRef) extends Request
+
+  case class HandleAck(deliveryTag: Long, multiple: Boolean)
+
+  case class HandleNack(deliveryTag: Long, multiple: Boolean)
 
   /**
    * sent back by a publisher when the request was processed successfully
@@ -146,6 +162,12 @@ object Amqp {
    * (exchange, key) pair for which the broker could not find any destination
    */
   case class ReturnedMessage(replyCode: Int, replyText: String, exchange: String, routingKey: String, properties: BasicProperties, body: Array[Byte])
+
+  /**
+   * flow-control message, sent to listeners set with AddFlowListener
+   * @param active
+   */
+  case class HandleFlow(active: Boolean)
 
   /**executes a callback when a connection or channel actors is "connected" i.e. usable
    * <ul>

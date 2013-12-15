@@ -127,6 +127,23 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
       stay()
     }
 
+    case Event(request@AddReturnListener(listener), Connected(channel)) => {
+      stay replying withChannel(channel, request) {
+        c => c.addReturnListener(new ReturnListener {
+          def handleReturn(replyCode: Int, replyText: String, exchange: String, routingKey: String, properties: BasicProperties, body: Array[Byte]) {
+            listener ! ReturnedMessage(replyCode, replyText, exchange, routingKey, properties, body)
+          }
+        })
+      }
+    }
+    case Event(request@AddFlowListener(listener), Connected(channel)) => {
+      stay replying withChannel(channel, request) {
+        c => c.addFlowListener(new FlowListener {
+          def handleFlow(active: Boolean): Unit = listener ! HandleFlow(active)
+        })
+      }
+    }
+
     case Event(request@Publish(exchange, routingKey, body, properties, mandatory, immediate), Connected(channel)) => {
       log.debug("publishing %s".format(request))
       val props = properties getOrElse new AMQP.BasicProperties.Builder().build()
@@ -180,6 +197,28 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
     case Event(request@Get(queue, autoAck), Connected(channel)) => {
       log.debug("getting from queue {} autoAck {}", queue, autoAck)
       stay replying withChannel(channel, request)(c => c.basicGet(queue, autoAck))
+    }
+    case Event(request@ConfirmSelect, Connected(channel)) => {
+      stay replying withChannel(channel, request)(c => c.confirmSelect())
+    }
+    case Event(request@AddConfirmListener(listener), Connected(channel)) => {
+      stay replying withChannel(channel, request)(c => c.addConfirmListener(new ConfirmListener {
+        def handleAck(deliveryTag: Long, multiple: Boolean): Unit = listener ! HandleAck(deliveryTag, multiple)
+
+        def handleNack(deliveryTag: Long, multiple: Boolean): Unit = listener ! HandleNack(deliveryTag, multiple)
+      }))
+    }
+    case Event(request@WaitForConfirms(timeout), Connected(channel)) => {
+      stay replying withChannel(channel, request)(c => timeout match {
+        case Some(value) => c.waitForConfirms(value)
+        case None => c.waitForConfirms()
+      })
+    }
+    case Event(request@WaitForConfirmsOrDie(timeout), Connected(channel)) => {
+      stay replying withChannel(channel, request)(c => timeout match {
+        case Some(value) => c.waitForConfirmsOrDie(value)
+        case None => c.waitForConfirmsOrDie()
+      })
     }
   }
 
