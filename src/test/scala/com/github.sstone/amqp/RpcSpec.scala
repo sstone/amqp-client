@@ -39,6 +39,7 @@ class RpcSpec extends ChannelSpec {
       val server = ConnectionOwner.createChildActor(conn, RpcServer.props(queue, exchange, "my_key", proc))
       val client1 = ConnectionOwner.createChildActor(conn, RpcClient.props())
       val client2 = ConnectionOwner.createChildActor(conn, RpcClient.props())
+
       waitForConnection(system, conn, server, client1, client2).await()
 
       val f1 = Future {

@@ -23,26 +23,47 @@ class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[R
   // consumer tag -> queue map
   val consumerTags = scala.collection.mutable.HashMap.empty[String, String]
   var consumer: Option[DefaultConsumer] = None
+  var pending = Vector.empty[Request]
 
-  override def onChannel(channel: Channel) {
+  override def onChannel(channel: Channel, forwarder: ActorRef) {
     val destination = listener getOrElse self
-    consumer = Some(new DefaultConsumer(channel) {
-      override def handleDelivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]) {
-        destination ! Delivery(consumerTag, envelope, properties, body)
-      }
-    })
+    forwarder ! CreateConsumer(destination)
     consumerTags.clear()
   }
 
-  when(Connected) {
+  override def connected(channel: Channel, forwarder: ActorRef) : Receive =  ({
+    case Ok(_, Some(consumer: DefaultConsumer)) => {
+      log.info("consumer ready")
+      pending.map(r => self ! r)
+      pending = Vector.empty[Request]
+      context.become(consumerReady(channel, forwarder, consumer))
+    }
     /**
      * add a queue to our consumer
      */
-    case Event(request@AddQueue(queue), Connected(channel)) => {
+    case request@AddQueue(queue) => {
+      log.debug(s"buffering $request")
+      pending = pending :+ request
+    }
+
+    /**
+     * add a binding to our consumer: declare the queue, bind it, and consume from it
+     */
+    case request@AddBinding(binding) => {
+      log.debug(s"buffering $request")
+      pending = pending :+ request
+    }
+  } : Receive) orElse super.connected(channel, forwarder)
+
+  def consumerReady(channel: Channel, forwarder: ActorRef, consumer: DefaultConsumer) : Receive = ({
+    /**
+     * add a queue to our consumer
+     */
+    case request@AddQueue(queue) => {
       log.debug("processing %s".format(request))
-      stay replying withChannel(channel, request)(c => {
+      sender !  withChannel(channel, request)(c => {
         val queueName = declareQueue(c, queue).getQueue
-        val consumerTag = c.basicConsume(queueName, autoack, consumer.get)
+        val consumerTag = c.basicConsume(queueName, autoack, consumer)
         consumerTags.put(consumerTag, queueName)
         consumerTag
       })
@@ -51,15 +72,15 @@ class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[R
     /**
      * add a binding to our consumer: declare the queue, bind it, and consume from it
      */
-    case Event(request@AddBinding(binding), Connected(channel)) => {
+    case request@AddBinding(binding) => {
       log.debug("processing %s".format(request))
-      stay replying withChannel(channel, request)(c => {
+      sender ! withChannel(channel, request)(c => {
         val queueName = declareQueue(c, binding.queue).getQueue
         c.queueBind(queueName, binding.exchange.name, binding.routingKey)
-        val consumerTag = c.basicConsume(queueName, autoack, consumer.get)
+        val consumerTag = c.basicConsume(queueName, autoack, consumer)
         consumerTags.put(consumerTag, queueName)
         consumerTag
       })
     }
-  }
+  } : Receive) orElse connected(channel, forwarder)
 }

@@ -5,7 +5,7 @@ import com.rabbitmq.client.AMQP.BasicProperties
 import com.rabbitmq.client.{Envelope, Channel}
 import concurrent.{ExecutionContext, Future}
 import util.{Failure, Success}
-import akka.actor.Props
+import akka.actor.{ActorRef, Props}
 
 object RpcServer {
 
@@ -75,8 +75,8 @@ class RpcServer(processor: RpcServer.IProcessor, init: Seq[Request] = Seq.empty[
     }
   }
 
-  when(ChannelOwner.Connected) {
-    case Event(delivery@Delivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]), ChannelOwner.Connected(channel)) => {
+  override def connected(channel: Channel, forwarder: ActorRef) : Receive =  ({
+    case delivery@Delivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]) => {
       log.debug("processing delivery")
       processor.process(delivery).onComplete {
         case Success(result) => {
@@ -100,8 +100,7 @@ class RpcServer(processor: RpcServer.IProcessor, init: Seq[Request] = Seq.empty[
           }
         }
       }
-      stay
     }
-  }
+  }: Receive) orElse super.connected(channel, forwarder)
 }
 

@@ -2,7 +2,7 @@ package com.github.sstone.amqp
 
 import collection.JavaConversions._
 import com.rabbitmq.client.AMQP.BasicProperties
-import com.rabbitmq.client.{Channel, Envelope}
+import com.rabbitmq.client.{ShutdownSignalException, Channel, Envelope}
 import akka.actor.{Actor, Props, ActorRef, ActorRefFactory}
 import akka.actor.FSM.{SubscribeTransitionCallBack, CurrentState, Transition}
 import java.util.concurrent.CountDownLatch
@@ -82,7 +82,11 @@ object Amqp {
 
   sealed trait Request
 
+  case class AddStatusListener(listener: ActorRef) extends Request
+
   case class AddReturnListener(listener: ActorRef) extends Request
+
+  case class AddShutdownListener(listener: ActorRef) extends Request
 
   case class AddFlowListener(listener: ActorRef) extends Request
 
@@ -104,9 +108,11 @@ object Amqp {
 
   case class Ack(deliveryTag: Long) extends Request
 
-  case class Reject(deliveryTag: Long, requeue: Boolean = true)  extends Request
+  case class Reject(deliveryTag: Long, requeue: Boolean = true) extends Request
 
   case class Transaction(publish: List[Publish]) extends Request
+
+  case class CreateConsumer(listener: ActorRef) extends Request
 
   case class AddQueue(queue: QueueParameters) extends Request
 
@@ -137,14 +143,14 @@ object Amqp {
    *               For example:
    *
    */
-  case class Ok(request:Request, result:Option[Any] = None)
+  case class Ok(request: Request, result: Option[Any] = None)
 
   /**
    * sent back by a publisher when the request was not processed successfully
    * @param request original request
    * @param reason whatever error that was thrown when the request was processed
    */
-  case class Error(request:Request, reason:Throwable)
+  case class Error(request: Request, reason: Throwable)
 
 
   /**
@@ -164,35 +170,37 @@ object Amqp {
   case class ReturnedMessage(replyCode: Int, replyText: String, exchange: String, routingKey: String, properties: BasicProperties, body: Array[Byte])
 
   /**
+   * shutdown message sent to listeners set with AddShutdownListener
+   * @param cause shutdown exception
+   */
+  case class Shutdown(cause: ShutdownSignalException)
+
+  /**
    * flow-control message, sent to listeners set with AddFlowListener
    * @param active
    */
   case class HandleFlow(active: Boolean)
 
-  /**executes a callback when a connection or channel actors is "connected" i.e. usable
-   * <ul>
-   * <li>for a connection actor, connected means that it is connected to the AMQP broker</li>
-   * <li>for a channel actor, connected means that it is has a valid channel (sent by its connection parent)</li>
-   * </ul>
-   * this is a simple wrapper around the FSM state monitoring tools provided by Akka, since ConnectionOwner and ChannelOwner
-   * are state machines with 2 states (Disconnected and Connected)
-   * @param actorRefFactory actor capable of creating child actors (will be used to create a temporary watcher)
-   * @param channelOrConnectionActor reference to a ConnectionOwner or ChannelOwner actor
-   * @param onConnected connection callback
-   */
+  /** executes a callback when a connection or channel actors is "connected" i.e. usable
+    * <ul>
+    * <li>for a connection actor, connected means that it is connected to the AMQP broker</li>
+    * <li>for a channel actor, connected means that it is has a valid channel (sent by its connection parent)</li>
+    * </ul>
+    * this is a simple wrapper around the FSM state monitoring tools provided by Akka, since ConnectionOwner and ChannelOwner
+    * are state machines with 2 states (Disconnected and Connected)
+    * @param actorRefFactory actor capable of creating child actors (will be used to create a temporary watcher)
+    * @param channelOrConnectionActor reference to a ConnectionOwner or ChannelOwner actor
+    * @param onConnected connection callback
+    */
   def onConnection(actorRefFactory: ActorRefFactory, channelOrConnectionActor: ActorRef, onConnected: () => Unit) = {
     val m = actorRefFactory.actorOf(Props(new Actor {
       def receive = {
-        case Transition(_, ChannelOwner.Disconnected, ChannelOwner.Connected)
-             | Transition(_, ConnectionOwner.Disconnected, ConnectionOwner.Connected)
-             | CurrentState(_, ConnectionOwner.Connected)
-             | CurrentState(_, ChannelOwner.Connected) => {
+        case ChannelOwner.Connected | ConnectionOwner.Connected =>
           onConnected()
           context.stop(self)
-        }
       }
     }))
-    channelOrConnectionActor ! SubscribeTransitionCallBack(m)
+    channelOrConnectionActor ! AddStatusListener(m)
   }
 
   /**

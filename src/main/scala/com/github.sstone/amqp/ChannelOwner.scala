@@ -3,11 +3,11 @@ package com.github.sstone.amqp
 import collection.JavaConversions._
 import com.rabbitmq.client.AMQP.BasicProperties
 import com.rabbitmq.client._
-import akka.actor.{Props, Actor, FSM}
-import java.io.IOException
-import com.github.sstone.amqp.ConnectionOwner.{CreateChannel, Shutdown}
+import akka.actor._
 import com.github.sstone.amqp.Amqp._
-import scala.util.{Try, Failure, Success}
+import scala.util.Try
+import scala.util.Failure
+import scala.util.Success
 
 object ChannelOwner {
 
@@ -19,12 +19,120 @@ object ChannelOwner {
 
   def props(init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None): Props = Props(new ChannelOwner(init, channelParams))
 
-  private[amqp] sealed trait Data
+  private[amqp] class Forwarder(channel: Channel) extends Actor with ActorLogging {
 
-  private[amqp] case object Uninitialized extends Data
+    override def postStop(): Unit = {
+      Try(channel.close())
+    }
 
-  private[amqp] case class Connected(channel: com.rabbitmq.client.Channel) extends Data
+    override def unhandled(message: Any): Unit = log.warning(s"unhandled message $message")
 
+    def receive = {
+      case request@AddShutdownListener(listener) => {
+        sender ! withChannel(channel, request)(c => c.addShutdownListener(new ShutdownListener {
+          def shutdownCompleted(cause: ShutdownSignalException): Unit = {
+            listener ! Shutdown(cause)
+          }
+        }))
+      }
+      case request@AddReturnListener(listener) => {
+        sender ! withChannel(channel, request)(c => c.addReturnListener(new ReturnListener {
+          def handleReturn(replyCode: Int, replyText: String, exchange: String, routingKey: String, properties: BasicProperties, body: Array[Byte]) {
+            listener ! ReturnedMessage(replyCode, replyText, exchange, routingKey, properties, body)
+          }
+        }))
+      }
+      case request@AddFlowListener(listener) => {
+        sender ! withChannel(channel, request)(c => c.addFlowListener(new FlowListener {
+          def handleFlow(active: Boolean): Unit = listener ! HandleFlow(active)
+        }))
+      }
+      case request@Publish(exchange, routingKey, body, properties, mandatory, immediate) => {
+        log.debug("publishing %s".format(request))
+        val props = properties getOrElse new AMQP.BasicProperties.Builder().build()
+        sender ! withChannel(channel, request)(c => c.basicPublish(exchange, routingKey, mandatory, immediate, props, body))
+      }
+      case request@Transaction(publish) => {
+        sender ! withChannel(channel, request) {
+          c => {
+            c.txSelect()
+            publish.foreach(p => c.basicPublish(p.exchange, p.key, p.mandatory, p.immediate, p.properties getOrElse new AMQP.BasicProperties.Builder().build(), p.body))
+            c.txCommit()
+          }
+        }
+      }
+      case request@DeclareExchange(exchange) => {
+        log.debug("declaring exchange {}", exchange)
+        sender ! withChannel(channel, request)(c => declareExchange(c, exchange))
+      }
+      case request@DeleteExchange(exchange, ifUnused) => {
+        log.debug("deleting exchange {} ifUnused {}", exchange, ifUnused)
+        sender ! withChannel(channel, request)(c => c.exchangeDelete(exchange, ifUnused))
+      }
+      case request@DeclareQueue(queue) => {
+        log.debug("declaring queue {}", queue)
+        sender ! withChannel(channel, request)(c => declareQueue(c, queue))
+      }
+      case request@PurgeQueue(queue) => {
+        log.debug("purging queue {}", queue)
+        sender ! withChannel(channel, request)(c => c.queuePurge(queue))
+      }
+      case request@DeleteQueue(queue, ifUnused, ifEmpty) => {
+        log.debug("deleting queue {} ifUnused {} ifEmpty {}", queue, ifUnused, ifEmpty)
+        sender ! withChannel(channel, request)(c => c.queueDelete(queue, ifUnused, ifEmpty))
+      }
+      case request@QueueBind(queue, exchange, routingKey, args) => {
+        log.debug("binding queue {} to key {} on exchange {}", queue, routingKey, exchange)
+        sender ! withChannel(channel, request)(c => c.queueBind(queue, exchange, routingKey, args))
+      }
+      case request@QueueUnbind(queue, exchange, routingKey, args) => {
+        log.debug("unbinding queue {} to key {} on exchange {}", queue, routingKey, exchange)
+        sender ! withChannel(channel, request)(c => c.queueUnbind(queue, exchange, routingKey, args))
+      }
+      case request@Get(queue, autoAck) => {
+        log.debug("getting from queue {} autoAck {}", queue, autoAck)
+        sender ! withChannel(channel, request)(c => c.basicGet(queue, autoAck))
+      }
+      case request@Ack(deliveryTag) => {
+        log.debug("acking %d on %s".format(deliveryTag, channel))
+        sender ! withChannel(channel, request)(c => c.basicAck(deliveryTag, false))
+      }
+      case request@Reject(deliveryTag, requeue) => {
+        log.debug("rejecting %d on %s".format(deliveryTag, channel))
+        sender ! withChannel(channel, request)(c => c.basicReject(deliveryTag, requeue))
+      }
+      case request@CreateConsumer(listener) => {
+        log.debug(s"creating new consumer for listener $listener")
+        sender ! withChannel(channel, request)(c => new DefaultConsumer(channel) {
+          override def handleDelivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]) {
+            listener ! Delivery(consumerTag, envelope, properties, body)
+          }
+        })
+      }
+      case request@ConfirmSelect => {
+        sender ! withChannel(channel, request)(c => c.confirmSelect())
+      }
+      case request@AddConfirmListener(listener) => {
+        sender ! withChannel(channel, request)(c => c.addConfirmListener(new ConfirmListener {
+          def handleAck(deliveryTag: Long, multiple: Boolean): Unit = listener ! HandleAck(deliveryTag, multiple)
+
+          def handleNack(deliveryTag: Long, multiple: Boolean): Unit = listener ! HandleNack(deliveryTag, multiple)
+        }))
+      }
+      case request@WaitForConfirms(timeout) => {
+        sender ! withChannel(channel, request)(c => timeout match {
+          case Some(value) => c.waitForConfirms(value)
+          case None => c.waitForConfirms()
+        })
+      }
+      case request@WaitForConfirmsOrDie(timeout) => {
+        sender ! withChannel(channel, request)(c => timeout match {
+          case Some(value) => c.waitForConfirmsOrDie(value)
+          case None => c.waitForConfirmsOrDie()
+        })
+      }
+    }
+  }
 
   def withChannel[T](channel: Channel, request: Request)(f: Channel => T) = {
     Try(f(channel)) match {
@@ -41,215 +149,59 @@ object ChannelOwner {
   }
 }
 
-
-/**
- * Channel owners are created by connection owners and hold an AMQP channel which is used to do
- * basically everything: create queues and bindings, publish messages, consume messages...
- * @param channelParams
- */
-class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None) extends Actor with FSM[ChannelOwner.State, ChannelOwner.Data] {
+class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None) extends Actor with ActorLogging {
 
   import ChannelOwner._
 
   var requestLog: Vector[Request] = init.toVector
+  var statusListener: Option[ActorRef] = None
 
-  startWith(Disconnected, Uninitialized)
+  override def preStart() = context.parent ! ConnectionOwner.CreateChannel
 
-  override def preStart() {
-    context.parent ! CreateChannel
+  override def unhandled(message: Any): Unit = {
+    log.warning(s"unhandled message $message")
+    super.unhandled(message)
   }
 
-  override def preRestart(reason: Throwable, message: Option[Any]) {
-    log.warning("preRestart {} {}", reason, message)
-    super.preRestart(reason, message)
-  }
+  def onChannel(channel: Channel, forwarder: ActorRef): Unit = {}
 
-  override def postRestart(reason: Throwable) {
-    log.warning("preRestart {} {}", reason)
-    super.postRestart(reason)
-  }
+  def receive = disconnected
 
-  /**
-   * additional setup step that gets called each when this actor receives a channel
-   * from its ConnectionOwner parent.
-   * override this to implement custom steps
-   * @param channel AMQP channel sent by the actor's parent
-   */
-  def onChannel(channel: Channel) {}
-
-  def setup(channel: Channel) {
-    channelParams.foreach(p => channel.basicQos(p.qos))
-    channel.addReturnListener(new ReturnListener() {
-      def handleReturn(replyCode: Int, replyText: String, exchange: String, routingKey: String, properties: BasicProperties, body: Array[Byte]) {
-        log.warning("returned message code=%d text=%s exchange=%s routing_key=%s".format(replyCode, replyText, exchange, routingKey))
-        self ! ReturnedMessage(replyCode, replyText, exchange, routingKey, properties, body)
-      }
-    })
-    channel.addShutdownListener(new ShutdownListener {
-      def shutdownCompleted(cause: ShutdownSignalException) {
-        if (!cause.isInitiatedByApplication) {
-          log.error(cause, "channel was shut down")
-          self ! Shutdown(cause)
-          context.parent ! CreateChannel
-        }
-      }
-    })
-    onChannel(channel)
-  }
-
-  when(Disconnected) {
-    case Event(channel: Channel, _) => {
-      setup(channel)
-      goto(Connected) using Connected(channel)
+  def disconnected: Receive = {
+    case channel: Channel => {
+      val forwarder = context.actorOf(Props(new Forwarder(channel)))
+      forwarder ! AddShutdownListener(self)
+      forwarder ! AddReturnListener(self)
+      onChannel(channel, forwarder)
+      requestLog.map(r => self forward r)
+      log.info(s"got channel $channel")
+      statusListener.map(a => a ! Connected)
+      context.become(connected(channel, forwarder))
     }
-    case Event(Record(request), _) => {
+    case Record(request: Request) => {
       requestLog :+= request
-      self forward request
-      stay()
     }
+    case AddStatusListener(actor) => statusListener = Some(actor)
   }
 
-  when(Connected) {
-    case Event(channel: Channel, _) => {
-      // we already have a channel, close this one to prevent resource leaks
-      log.warning("closing unexpected channel {}", channel)
-      channel.close()
-      stay()
-    }
-    /*
-     * sent by the actor's parent when the AMQP connection is lost
-     */
-    case Event(Shutdown(cause), _) => goto(Disconnected)
-
-    case Event(Record(request), _) => {
+  def connected(channel: Channel, forwarder: ActorRef): Receive = {
+    case Record(request: Request) => {
       requestLog :+= request
-      self forward request
-      stay()
+      forwarder forward request
     }
-
-    case Event(request@AddReturnListener(listener), Connected(channel)) => {
-      stay replying withChannel(channel, request) {
-        c => c.addReturnListener(new ReturnListener {
-          def handleReturn(replyCode: Int, replyText: String, exchange: String, routingKey: String, properties: BasicProperties, body: Array[Byte]) {
-            listener ! ReturnedMessage(replyCode, replyText, exchange, routingKey, properties, body)
-          }
-        })
-      }
+    case AddStatusListener(actor) => {
+      statusListener = Some(actor)
+      actor ! Connected
     }
-    case Event(request@AddFlowListener(listener), Connected(channel)) => {
-      stay replying withChannel(channel, request) {
-        c => c.addFlowListener(new FlowListener {
-          def handleFlow(active: Boolean): Unit = listener ! HandleFlow(active)
-        })
-      }
+    case request: Request => {
+      forwarder forward request
     }
-
-    case Event(request@Publish(exchange, routingKey, body, properties, mandatory, immediate), Connected(channel)) => {
-      log.debug("publishing %s".format(request))
-      val props = properties getOrElse new AMQP.BasicProperties.Builder().build()
-      stay replying withChannel(channel, request)(c => c.basicPublish(exchange, routingKey, mandatory, immediate, props, body))
-    }
-    case Event(request@Transaction(publish), Connected(channel)) => {
-      stay replying withChannel(channel, request) {
-        c => {
-          c.txSelect()
-          publish.foreach(p => c.basicPublish(p.exchange, p.key, p.mandatory, p.immediate, p.properties getOrElse new AMQP.BasicProperties.Builder().build(), p.body))
-          c.txCommit()
-        }
-      }
-    }
-    case Event(request@Ack(deliveryTag), Connected(channel)) => {
-      log.debug("acking %d on %s".format(deliveryTag, channel))
-      stay replying withChannel(channel, request)(c => c.basicAck(deliveryTag, false))
-    }
-    case Event(request@Reject(deliveryTag, requeue), Connected(channel)) => {
-      log.debug("rejecting %d on %s".format(deliveryTag, channel))
-      stay replying withChannel(channel, request)(c => c.basicReject(deliveryTag, requeue))
-    }
-    case Event(request@DeclareExchange(exchange), Connected(channel)) => {
-      log.debug("declaring exchange {}", exchange)
-      stay replying withChannel(channel, request)(c => declareExchange(c, exchange))
-    }
-    case Event(request@DeleteExchange(exchange, ifUnused), Connected(channel)) => {
-      log.debug("deleting exchange {} ifUnused {}", exchange, ifUnused)
-      stay replying withChannel(channel, request)(c => c.exchangeDelete(exchange, ifUnused))
-    }
-    case Event(request@DeclareQueue(queue), Connected(channel)) => {
-      log.debug("declaring queue {}", queue)
-      stay replying withChannel(channel, request)(c => declareQueue(c, queue))
-    }
-    case Event(request@PurgeQueue(queue), Connected(channel)) => {
-      log.debug("purging queue {}", queue)
-      stay replying withChannel(channel, request)(c => c.queuePurge(queue))
-    }
-    case Event(request@DeleteQueue(queue, ifUnused, ifEmpty), Connected(channel)) => {
-      log.debug("deleting queue {} ifUnused {} ifEmpty {}", queue, ifUnused, ifEmpty)
-      stay replying withChannel(channel, request)(c => c.queueDelete(queue, ifUnused, ifEmpty))
-    }
-    case Event(request@QueueBind(queue, exchange, routingKey, args), Connected(channel)) => {
-      log.debug("binding queue {} to key {} on exchange {}", queue, routingKey, exchange)
-      stay replying withChannel(channel, request)(c => c.queueBind(queue, exchange, routingKey, args))
-    }
-    case Event(request@QueueUnbind(queue, exchange, routingKey, args), Connected(channel)) => {
-      log.debug("unbinding queue {} to key {} on exchange {}", queue, routingKey, exchange)
-      stay replying withChannel(channel, request)(c => c.queueUnbind(queue, exchange, routingKey, args))
-    }
-    case Event(request@Get(queue, autoAck), Connected(channel)) => {
-      log.debug("getting from queue {} autoAck {}", queue, autoAck)
-      stay replying withChannel(channel, request)(c => c.basicGet(queue, autoAck))
-    }
-    case Event(request@ConfirmSelect, Connected(channel)) => {
-      stay replying withChannel(channel, request)(c => c.confirmSelect())
-    }
-    case Event(request@AddConfirmListener(listener), Connected(channel)) => {
-      stay replying withChannel(channel, request)(c => c.addConfirmListener(new ConfirmListener {
-        def handleAck(deliveryTag: Long, multiple: Boolean): Unit = listener ! HandleAck(deliveryTag, multiple)
-
-        def handleNack(deliveryTag: Long, multiple: Boolean): Unit = listener ! HandleNack(deliveryTag, multiple)
-      }))
-    }
-    case Event(request@WaitForConfirms(timeout), Connected(channel)) => {
-      stay replying withChannel(channel, request)(c => timeout match {
-        case Some(value) => c.waitForConfirms(value)
-        case None => c.waitForConfirms()
-      })
-    }
-    case Event(request@WaitForConfirmsOrDie(timeout), Connected(channel)) => {
-      stay replying withChannel(channel, request)(c => timeout match {
-        case Some(value) => c.waitForConfirmsOrDie(value)
-        case None => c.waitForConfirmsOrDie()
-      })
+    case Shutdown(cause) if !cause.isInitiatedByApplication => {
+      log.error(cause, "shutdown")
+      context.stop(forwarder)
+      context.parent ! ConnectionOwner.CreateChannel
+      statusListener.map(a => a ! Disconnected)
+      context.become(disconnected)
     }
   }
-
-  whenUnhandled {
-    case Event(ok@Ok(_, _), _) => {
-      log.debug("ignoring successful reply to self: {}", ok)
-      stay()
-    }
-  }
-
-  onTransition {
-    case Disconnected -> Connected => {
-      log.info("connected")
-      requestLog.foreach(r => self ! r)
-    }
-    case Connected -> Disconnected => {
-      log.warning("disconnected")
-    }
-  }
-
-  onTermination {
-    case StopEvent(_, Connected, Connected(channel)) => {
-      try {
-        log.info("closing channel")
-        channel.close()
-      }
-      catch {
-        case e: Exception => log.warning(e.toString)
-      }
-    }
-  }
-
-  initialize
 }
