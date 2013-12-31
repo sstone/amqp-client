@@ -1,7 +1,7 @@
 package com.github.sstone.amqp
 
 import Amqp._
-import akka.actor.{Props, ActorRef}
+import akka.actor.{UnboundedStash, UnrestrictedStash, Props, ActorRef}
 import com.rabbitmq.client.{Envelope, Channel, DefaultConsumer}
 import com.rabbitmq.client.AMQP.BasicProperties
 
@@ -18,12 +18,11 @@ object Consumer {
  * @param listener optional listener actor; if not set, self will be used instead
  * @param channelParams optional channel parameters
  */
-class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None) extends ChannelOwner(init, channelParams) {
+class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None) extends ChannelOwner(init, channelParams) with UnboundedStash {
   import ChannelOwner._
   // consumer tag -> queue map
   val consumerTags = scala.collection.mutable.HashMap.empty[String, String]
   var consumer: Option[DefaultConsumer] = None
-  var pending = Vector.empty[Request]
 
   override def onChannel(channel: Channel, forwarder: ActorRef) {
     val destination = listener getOrElse self
@@ -34,8 +33,7 @@ class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[R
   override def connected(channel: Channel, forwarder: ActorRef) : Receive =  ({
     case Ok(_, Some(consumer: DefaultConsumer)) => {
       log.info("consumer ready")
-      pending.map(r => self ! r)
-      pending = Vector.empty[Request]
+      unstashAll()
       context.become(consumerReady(channel, forwarder, consumer))
     }
     /**
@@ -43,7 +41,7 @@ class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[R
      */
     case request@AddQueue(queue) => {
       log.debug(s"buffering $request")
-      pending = pending :+ request
+      stash()
     }
 
     /**
@@ -51,7 +49,7 @@ class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[R
      */
     case request@AddBinding(binding) => {
       log.debug(s"buffering $request")
-      pending = pending :+ request
+      stash()
     }
   } : Receive) orElse super.connected(channel, forwarder)
 

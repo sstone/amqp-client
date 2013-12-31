@@ -11,6 +11,7 @@ import scala.Some
 import com.github.sstone.amqp.Amqp.QueueParameters
 import com.github.sstone.amqp.Amqp.Delivery
 import java.io.IOException
+import akka.event.LoggingReceive
 
 object RpcClient {
 
@@ -52,13 +53,13 @@ class RpcClient(channelParams: Option[ChannelParameters] = None) extends Channel
     correlationMap.clear()
   }
 
-  override def disconnected: Receive = ({
+  override def disconnected: Receive = LoggingReceive ({
     case request@Request(publish, numberOfResponses) => {
       log.warning(s"not connected, cannot send rpc request")
     }
   }: Receive) orElse super.disconnected
 
-  override def connected(channel: Channel, forwarder: ActorRef): Receive = ({
+  override def connected(channel: Channel, forwarder: ActorRef): Receive = LoggingReceive ({
     case Request(publish, numberOfResponses) => {
       counter = counter + 1
       log.debug(s"sending ${publish.size} messages, replyTo = $queue")

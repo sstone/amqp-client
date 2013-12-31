@@ -7,6 +7,7 @@ import akka.util.Timeout
 import com.github.sstone.amqp.RpcClient.Request
 import com.github.sstone.amqp.Amqp.Publish
 import scala.concurrent.duration._
+import com.rabbitmq.client.ConnectionFactory
 
 /**
  * Created by fabrice on 31/12/13.
@@ -17,9 +18,9 @@ object Test2 extends App {
   implicit val system = ActorSystem("mySystem")
   implicit val timeout: Timeout = 1 second
   // create an AMQP connection
-  val conn = new RabbitMQConnection(host = "localhost", name = "Connection")
+  val conn = system.actorOf(ConnectionOwner.props(new ConnectionFactory(), reconnectionDelay = 5 seconds), "connection")
 
-  val client = conn.createRpcClient()
+  val client = ConnectionOwner.createChildActor(conn, RpcClient.props(), Some("RpcClient"))
 
   // send 1 request every second
   while(true) {

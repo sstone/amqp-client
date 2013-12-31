@@ -8,6 +8,7 @@ import com.github.sstone.amqp.Amqp._
 import scala.util.Try
 import scala.util.Failure
 import scala.util.Success
+import akka.event.LoggingReceive
 
 object ChannelOwner {
 
@@ -167,7 +168,7 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
 
   def receive = disconnected
 
-  def disconnected: Receive = {
+  def disconnected: Receive = LoggingReceive {
     case channel: Channel => {
       val forwarder = context.actorOf(Props(new Forwarder(channel)))
       forwarder ! AddShutdownListener(self)
@@ -184,7 +185,8 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
     case AddStatusListener(actor) => statusListener = Some(actor)
   }
 
-  def connected(channel: Channel, forwarder: ActorRef): Receive = {
+  def connected(channel: Channel, forwarder: ActorRef): Receive = LoggingReceive {
+    case Amqp.Ok(_, _) => ()
     case Record(request: Request) => {
       requestLog :+= request
       forwarder forward request

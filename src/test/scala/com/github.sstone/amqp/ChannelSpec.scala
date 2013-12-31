@@ -11,12 +11,20 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import com.rabbitmq.client.ConnectionFactory
 import com.github.sstone.amqp.Amqp._
+import scala.util.Random
 
 class ChannelSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec with ShouldMatchers with BeforeAndAfter with ImplicitSender {
   implicit val timeout = Timeout(5 seconds)
   val connFactory = new ConnectionFactory()
   var conn: ActorRef = _
   var channelOwner: ActorRef = _
+  val random = new Random()
+
+  def randomQueueName = "queue" + random.nextInt()
+
+  def randomQueue = QueueParameters(name = randomQueueName, passive = false, exclusive = false)
+
+  def randomKey = "key" + random.nextInt()
 
   before {
     conn = system.actorOf(Props(new ConnectionOwner(connFactory)))

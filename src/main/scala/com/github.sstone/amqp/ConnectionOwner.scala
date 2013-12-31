@@ -10,6 +10,7 @@ import akka.pattern.ask
 import com.rabbitmq.client.{Connection, ShutdownSignalException, ShutdownListener, ConnectionFactory, Address => RMQAddress}
 import Amqp._
 import java.util.concurrent.ExecutorService
+import akka.event.LoggingReceive
 
 
 object ConnectionOwner {
@@ -133,8 +134,10 @@ class ConnectionOwner(connFactory: ConnectionFactory,
                       addresses: Option[Array[RMQAddress]] = None) extends Actor with ActorLogging {
 
   import ConnectionOwner._
+  import context.dispatcher
   var connection: Option[Connection] = None
   var statusListener: Option[ActorRef] = None
+  val reconnectTimer = context.system.scheduler.schedule(10 milliseconds, reconnectionDelay, self, 'connect)
 
   override def postStop = connection.map(c => Try(c.close()))
 
@@ -167,11 +170,9 @@ class ConnectionOwner(connFactory: ConnectionFactory,
     conn
   }
 
-  override def preStart() = self ! 'connect
-
   def receive = disconnected
 
-  def disconnected: Receive = {
+  def disconnected: Receive = LoggingReceive {
     case 'connect => {
       log.debug(s"trying to connect ${toUri(connFactory)}")
       Try(createConnection) match {
@@ -184,8 +185,6 @@ class ConnectionOwner(connFactory: ConnectionFactory,
         }
         case Failure(cause) => {
           log.error(cause, "connection failed")
-          import scala.concurrent.ExecutionContext.Implicits.global
-          context.system.scheduler.scheduleOnce(reconnectionDelay, self, 'connect)
         }
       }
     }
@@ -197,10 +196,15 @@ class ConnectionOwner(connFactory: ConnectionFactory,
     }
   }
 
-  def connected(conn: Connection): Receive = {
+  def connected(conn: Connection): Receive = LoggingReceive {
+    case 'connect => ()
+    case Amqp.Ok(_, _) => ()
     case CreateChannel => Try(conn.createChannel()) match {
       case Success(channel) => sender ! channel
-      case Failure(cause) => context.become(disconnected)
+      case Failure(cause) => {
+        log.error(cause, "cannot create channel")
+        context.become(disconnected)
+      }
     }
     case AddStatusListener(listener) => {
       statusListener = Some(listener)
@@ -209,7 +213,7 @@ class ConnectionOwner(connFactory: ConnectionFactory,
     case Create(props, name) => {
       sender ! createChild(props, name)
     }
-    case Shutdown(cause) if !cause.isInitiatedByApplication => {
+    case Shutdown(cause) => {
       log.error(cause, "connection lost")
       connection = None
       context.children.foreach(_ ! Shutdown(cause))

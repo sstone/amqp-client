@@ -2,15 +2,14 @@ package com.github.sstone.amqp
 
 import akka.actor.{Props, Actor, ActorSystem}
 import com.github.sstone.amqp.Amqp._
+import com.rabbitmq.client.ConnectionFactory
+import scala.concurrent.duration._
 
-/**
- * Created by fabrice on 30/12/13.
- */
 object Test1 extends App {
   implicit val system = ActorSystem("mySystem")
 
   // create an AMQP connection
-  val conn = new RabbitMQConnection(host = "localhost", name = "Connection")
+  val conn = system.actorOf(ConnectionOwner.props(new ConnectionFactory(), reconnectionDelay = 5 seconds), "connection")
 
   // create an actor that will receive AMQP deliveries
   val listener = system.actorOf(Props(new Actor {
@@ -27,9 +26,8 @@ object Test1 extends App {
 
   // we initialize our consumer with an AddBinding request: the queue and the binding will be recreated if the connection
   // to the broker is lost and restored
-  val consumer = conn.createChild(Props(new Consumer(
-    init = List(AddBinding(Binding(StandardExchanges.amqDirect, queueParams, "my_key"))),
-    listener = Some(listener))))
+  val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(listener, StandardExchanges.amqDirect, queueParams, "my_key", channelParams = None, autoack = true))
+
   // wait till everyone is actually connected to the broker
   Amqp.waitForConnection(system, consumer).await()
 
