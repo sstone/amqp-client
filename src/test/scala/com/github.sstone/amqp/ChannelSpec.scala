@@ -27,7 +27,7 @@ class ChannelSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec with 
   def randomKey = "key" + random.nextInt()
 
   before {
-    conn = system.actorOf(Props(new ConnectionOwner(connFactory)))
+    conn = system.actorOf(ConnectionOwner.props(connFactory, 1 second))
     channelOwner = ConnectionOwner.createChildActor(conn, ChannelOwner.props())
     waitForConnection(system, conn, channelOwner).await(5, TimeUnit.SECONDS)
   }

@@ -170,9 +170,13 @@ class ConnectionOwner(connFactory: ConnectionFactory,
     conn
   }
 
+  // start in disconnected mode
   def receive = disconnected
 
   def disconnected: Receive = LoggingReceive {
+    /**
+     * connect to the broker
+     */
     case 'connect => {
       log.debug(s"trying to connect ${toUri(connFactory)}")
       Try(createConnection) match {
@@ -188,7 +192,15 @@ class ConnectionOwner(connFactory: ConnectionFactory,
         }
       }
     }
+
+    /**
+     * add a status listener that will be sent Disconnected and Connected messages
+     */
     case AddStatusListener(listener) => statusListener = Some(listener)
+
+    /**
+     * create a "channel aware" child actor
+     */
     case Create(props, name) => {
       val child = createChild(props, name)
       log.debug("creating child {} while in disconnected state", child)

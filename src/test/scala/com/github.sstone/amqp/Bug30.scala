@@ -13,7 +13,7 @@ import com.github.sstone.amqp.Amqp.QueueParameters
 import com.github.sstone.amqp.Amqp.Delivery
 
 object Bug30 {
-  class Listener(conn: ActorRef) extends Actor with ActorLogging {
+  class Listener(conn: ActorRef, tellMeWhenYoureDone: ActorRef) extends Actor with ActorLogging {
     import concurrent.ExecutionContext.Implicits.global
 
     val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(
@@ -27,7 +27,7 @@ object Bug30 {
     val producer = ConnectionOwner.createChildActor(conn, ChannelOwner.props())
     Amqp.waitForConnection(context.system, consumer, producer)
 
-    context.system.scheduler.schedule(100 milliseconds, 1 second, producer, Publish("amq.direct", "my_key", body = "test".getBytes("UTF-8")))
+    context.system.scheduler.schedule(10 milliseconds, 500 milliseconds, producer, Publish("amq.direct", "my_key", body = "test".getBytes("UTF-8")))
 
     var counter = 0
 
@@ -35,24 +35,40 @@ object Bug30 {
       case Delivery(consumerTag, envelope, properties, body) => {
         val replyTo = sender
         log.info(s"receive deliveryTag ${envelope.getDeliveryTag} from $replyTo")
-        context.system.scheduler.scheduleOnce(1 second, replyTo, Ack(envelope.getDeliveryTag))
+        // wait 500 milliseconds before acking tne message: this makes sure that there are pending acknowledgments when the
+        // consumer crashes
+        context.system.scheduler.scheduleOnce(500 milliseconds, replyTo, Ack(envelope.getDeliveryTag))
         counter = counter + 1
         if (counter == 10) self ! 'crash
+        if (counter == 20) {
+          // ok, we're done: the consumer's channel crashed, everything (channel, rabbitmq consumer) was re-created properly
+          // and we received 10 additional messages
+          tellMeWhenYoureDone ! 'done
+          context.stop(self)
+        }
       }
 
       case 'crash => {
-        producer ! Amqp.DeclareExchange(ExchangeParameters(name = "I don't exist", passive = false, exchangeType = "foo"))
+        // ask the consumer to "passively declare" an exchange (i.e check that the exchange exists) that does not exist
+        // this will crash the channel owned by the consumer and force it to create a new one
+        consumer ! Amqp.DeclareExchange(ExchangeParameters(name = "I don't exist", passive = false, exchangeType = "foo"))
       }
     }
   }
 }
 
+/**
+ * see issue #30: make sure that consumers are recreated properly and that pending acks are handled properly
+ * "pending acks" means Acks that are send that after the original consumer's channel crashed but refer to delivery
+ * tags created by the channel that crashed.
+ */
 @RunWith(classOf[JUnitRunner])
 class Bug30 extends ChannelSpec {
   "ChannelOwner" should {
     "redefine consumers when a channel fails" in {
-      val listener = system.actorOf(Props(new Bug30.Listener(conn)), "listener")
-      Thread.sleep(Long.MaxValue)
+      val probe = TestProbe()
+      val listener = system.actorOf(Props(new Bug30.Listener(conn, probe.ref)), "listener")
+      probe.expectMsg(15 seconds, 'done)
     }
   }
 }
