@@ -12,7 +12,7 @@ import com.github.sstone.amqp.Amqp.Publish
 import com.github.sstone.amqp.Amqp.QueueParameters
 import com.github.sstone.amqp.Amqp.Delivery
 
-object Bug30 {
+object Bug30Spec {
   class Listener(conn: ActorRef, tellMeWhenYoureDone: ActorRef) extends Actor with ActorLogging {
     import concurrent.ExecutionContext.Implicits.global
 
@@ -63,11 +63,11 @@ object Bug30 {
  * tags created by the channel that crashed.
  */
 @RunWith(classOf[JUnitRunner])
-class Bug30 extends ChannelSpec {
+class Bug30Spec extends ChannelSpec {
   "ChannelOwner" should {
     "redefine consumers when a channel fails" in {
       val probe = TestProbe()
-      val listener = system.actorOf(Props(new Bug30.Listener(conn, probe.ref)), "listener")
+      val listener = system.actorOf(Props(new Bug30Spec.Listener(conn, probe.ref)), "listener")
       probe.expectMsg(15 seconds, 'done)
     }
   }
