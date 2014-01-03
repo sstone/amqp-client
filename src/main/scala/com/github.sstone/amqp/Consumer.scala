@@ -11,6 +11,8 @@ object Consumer {
 
   def props(listener: ActorRef, exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, channelParams: Option[ChannelParameters], autoack: Boolean): Props =
     props(Some(listener), init = List(AddBinding(Binding(exchange, queue, routingKey))), channelParams = channelParams, autoack = autoack)
+
+  def props(listener: ActorRef, channelParams: Option[ChannelParameters], autoack: Boolean): Props = props(Some(listener), channelParams = channelParams, autoack = autoack)
 }
 
 /**
@@ -26,34 +28,15 @@ class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[R
 
   override def onChannel(channel: Channel, forwarder: ActorRef) {
     val destination = listener getOrElse self
-    forwarder ! CreateConsumer(destination)
+    consumer = Some(new DefaultConsumer(channel) {
+      override def handleDelivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]) {
+        destination.tell(Delivery(consumerTag, envelope, properties, body), sender = forwarder)
+      }
+    })
     consumerTags.clear()
   }
 
-  override def connected(channel: Channel, forwarder: ActorRef) : Receive =  ({
-    case Ok(_, Some(consumer: DefaultConsumer)) => {
-      log.info("consumer ready")
-      unstashAll()
-      context.become(consumerReady(channel, forwarder, consumer))
-    }
-    /**
-     * add a queue to our consumer
-     */
-    case request@AddQueue(queue) => {
-      log.debug(s"buffering $request")
-      stash()
-    }
-
-    /**
-     * add a binding to our consumer: declare the queue, bind it, and consume from it
-     */
-    case request@AddBinding(binding) => {
-      log.debug(s"buffering $request")
-      stash()
-    }
-  } : Receive) orElse super.connected(channel, forwarder)
-
-  def consumerReady(channel: Channel, forwarder: ActorRef, consumer: DefaultConsumer) : Receive = ({
+  override def connected(channel: Channel, forwarder: ActorRef) : Receive = ({
     /**
      * add a queue to our consumer
      */
@@ -61,8 +44,9 @@ class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[R
       log.debug("processing %s".format(request))
       sender !  withChannel(channel, request)(c => {
         val queueName = declareQueue(c, queue).getQueue
-        val consumerTag = c.basicConsume(queueName, autoack, consumer)
+        val consumerTag = c.basicConsume(queueName, autoack, consumer.get)
         consumerTags.put(consumerTag, queueName)
+        log.debug(s"using consumer $consumerTag")
         consumerTag
       })
     }
@@ -75,10 +59,11 @@ class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[R
       sender ! withChannel(channel, request)(c => {
         val queueName = declareQueue(c, binding.queue).getQueue
         c.queueBind(queueName, binding.exchange.name, binding.routingKey)
-        val consumerTag = c.basicConsume(queueName, autoack, consumer)
+        val consumerTag = c.basicConsume(queueName, autoack, consumer.get)
+        log.debug(s"using consumer $consumerTag")
         consumerTags.put(consumerTag, queueName)
         consumerTag
       })
     }
-  } : Receive) orElse connected(channel, forwarder)
+  } : Receive) orElse super.connected(channel, forwarder)
 }

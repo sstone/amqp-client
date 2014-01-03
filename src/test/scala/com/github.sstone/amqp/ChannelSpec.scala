@@ -16,6 +16,8 @@ import scala.util.Random
 class ChannelSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec with ShouldMatchers with BeforeAndAfter with ImplicitSender {
   implicit val timeout = Timeout(5 seconds)
   val connFactory = new ConnectionFactory()
+  val uri = system.settings.config.getString("amqp-client-test.rabbitmq.uri")
+  connFactory.setUri(uri)
   var conn: ActorRef = _
   var channelOwner: ActorRef = _
   val random = new Random()
