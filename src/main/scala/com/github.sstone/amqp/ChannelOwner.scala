@@ -189,7 +189,7 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
     case Amqp.Ok(_, _) => ()
     case Record(request: Request) => {
       requestLog :+= request
-      forwarder forward request
+      self forward request
     }
     case AddStatusListener(actor) => {
       statusListener = Some(actor)

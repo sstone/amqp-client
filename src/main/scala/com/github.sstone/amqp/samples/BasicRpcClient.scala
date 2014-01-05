@@ -11,7 +11,7 @@ import com.github.sstone.amqp.Amqp.Publish
 
 
 /**
- * start with mvn exec:java -Dexec.mainClass=com.github.sstone.amqp.samples.BasicRpcClient -Dexec.classpathScope="test"
+ * start with mvn exec:java -Dexec.mainClass=com.github.sstone.amqp.samples.BasicRpcClient -Dexec.classpathScope="compile"
  */
 object BasicRpcClient extends App {
   import ExecutionContext.Implicits.global

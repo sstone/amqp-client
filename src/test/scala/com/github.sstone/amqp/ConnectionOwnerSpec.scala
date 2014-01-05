@@ -43,7 +43,7 @@ class ConnectionOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSp
           new Address("another.fake.host"),
           new Address(goodHost)
         ))))
-      Amqp.waitForConnection(system, conn).await(2, TimeUnit.SECONDS)
+      Amqp.waitForConnection(system, conn).await(50, TimeUnit.SECONDS)
       val actors = 100
       for (i <- 0 until actors) {
         val p = TestProbe()

@@ -11,7 +11,7 @@ import com.github.sstone.amqp.Amqp.QueueParameters
 import com.github.sstone.amqp.Amqp.Delivery
 
 /**
- * start with mvn exec:java -Dexec.mainClass=com.github.sstone.amqp.samples.BasicRpcServer -Dexec.classpathScope="test"
+ * start with mvn exec:java -Dexec.mainClass=com.github.sstone.amqp.samples.BasicRpcServer -Dexec.classpathScope="compile"
  */
 object BasicRpcServer extends App {
   import ExecutionContext.Implicits.global
