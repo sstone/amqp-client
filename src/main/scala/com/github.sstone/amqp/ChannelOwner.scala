@@ -164,7 +164,9 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
     super.unhandled(message)
   }
 
-  def onChannel(channel: Channel, forwarder: ActorRef): Unit = {}
+  def onChannel(channel: Channel, forwarder: ActorRef): Unit = {
+    channelParams.map(p => channel.basicQos(p.qos))
+  }
 
   def receive = disconnected
 

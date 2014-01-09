@@ -27,6 +27,7 @@ class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[R
   var consumer: Option[DefaultConsumer] = None
 
   override def onChannel(channel: Channel, forwarder: ActorRef) {
+    super.onChannel(channel, forwarder)
     val destination = listener getOrElse self
     consumer = Some(new DefaultConsumer(channel) {
       override def handleDelivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]) {

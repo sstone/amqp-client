@@ -35,6 +35,32 @@ class ConsumerSpec extends ChannelSpec {
       producer ! Publish(exchange.name, "my_key", message)
       probe.expectMsgClass(1.second, classOf[Delivery])
     }
+    "be able to set their channel's prefetch size" in {
+      val queue = randomQueue
+      val probe = TestProbe()
+      val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(listener = probe.ref, autoack = false, channelParams = Some(ChannelParameters(qos = 3))), timeout = 5000 millis)
+      consumer ! AddStatusListener(probe.ref)
+      probe.expectMsg(1 second, ChannelOwner.Connected)
+
+      consumer ! AddQueue(queue)
+      val Amqp.Ok(AddQueue(_), _) = receiveOne(1 second)
+
+      consumer ! Publish("", queue.name, "test".getBytes("UTF-8"))
+      val delivery1 = probe.expectMsgClass(200 milliseconds, classOf[Delivery])
+      consumer ! Publish("", queue.name, "test".getBytes("UTF-8"))
+      val delivery2 = probe.expectMsgClass(200 milliseconds, classOf[Delivery])
+      consumer ! Publish("", queue.name, "test".getBytes("UTF-8"))
+      val delivery3 = probe.expectMsgClass(200 milliseconds, classOf[Delivery])
+
+      // we have 3 pending messages, this one should not be received
+      consumer ! Publish("", queue.name, "test".getBytes("UTF-8"))
+      probe.expectNoMsg(500 milliseconds)
+
+      // but if we ack one our our messages we shoule get the 4th delivery
+      consumer ! Ack(deliveryTag = delivery1.envelope.getDeliveryTag)
+      val Amqp.Ok(Ack(_), _) = receiveOne(1 second)
+      val delivery4 = probe.expectMsgClass(200 milliseconds, classOf[Delivery])
+    }
     "be restarted if their channel crashes" in {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = randomQueue
