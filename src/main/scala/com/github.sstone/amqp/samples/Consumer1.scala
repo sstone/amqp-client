@@ -1,8 +1,10 @@
 package com.github.sstone.amqp.samples
 
 import akka.actor.{Props, Actor, ActorSystem}
-import com.github.sstone.amqp.{Amqp, Consumer, RabbitMQConnection}
+import com.github.sstone.amqp._
 import com.github.sstone.amqp.Amqp._
+import com.rabbitmq.client.ConnectionFactory
+import scala.concurrent.duration._
 
 /**
  * simple Consumer sample
@@ -13,7 +15,9 @@ object Consumer1 extends App {
   implicit val system = ActorSystem("mySystem")
 
   // create an AMQP connection
-  val conn = new RabbitMQConnection(host = "localhost", name = "Connection")
+  val connFactory = new ConnectionFactory()
+  connFactory.setUri("amqp://guest:guest@localhost/%2F")
+  val conn = system.actorOf(ConnectionOwner.props(connFactory, 1 second))
 
   // create an actor that will receive AMQP deliveries
   val listener = system.actorOf(Props(new Actor {
@@ -27,7 +31,7 @@ object Consumer1 extends App {
 
   // create a consumer that will route incoming AMQP messages to our listener
   // it starts with an empty list of queues to consume from
-  val consumer = conn.createChild(Props(new Consumer(listener = Some(listener))))
+  val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(listener, channelParams = None, autoack = false))
 
   // wait till everyone is actually connected to the broker
   Amqp.waitForConnection(system, consumer).await()

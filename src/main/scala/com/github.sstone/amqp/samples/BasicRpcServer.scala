@@ -1,15 +1,13 @@
 package com.github.sstone.amqp.samples
 
-import scala.concurrent.{Future, ExecutionContext}
 import akka.actor.ActorSystem
-import com.github.sstone.amqp.RabbitMQConnection
+import com.github.sstone.amqp.{RpcServer, ConnectionOwner}
 import com.github.sstone.amqp.Amqp._
 import com.github.sstone.amqp.RpcServer.IProcessor
 import com.github.sstone.amqp.RpcServer.ProcessResult
-import com.github.sstone.amqp.Amqp.ChannelParameters
-import com.github.sstone.amqp.Amqp.QueueParameters
-import com.github.sstone.amqp.Amqp.Delivery
-
+import com.rabbitmq.client.ConnectionFactory
+import scala.concurrent.{Future, ExecutionContext}
+import scala.concurrent.duration._
 /**
  * start with mvn exec:java -Dexec.mainClass=com.github.sstone.amqp.samples.BasicRpcServer -Dexec.classpathScope="compile"
  */
@@ -19,7 +17,9 @@ object BasicRpcServer extends App {
   implicit val system = ActorSystem("mySystem")
 
   // create an AMQP connection
-  val conn = new RabbitMQConnection(host = "localhost", name = "Connection")
+  val connFactory = new ConnectionFactory()
+  connFactory.setUri("amqp://guest:guest@localhost/%2F")
+  val conn = system.actorOf(ConnectionOwner.props(connFactory, 1 second))
 
   val queueParams = QueueParameters("my_queue", passive = false, durable = false, exclusive = false, autodelete = true)
 
@@ -39,5 +39,5 @@ object BasicRpcServer extends App {
     def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(Some(("server error: " + e.getMessage).getBytes("UTF-8")))
   }
 
-  conn.createRpcServer(StandardExchanges.amqDirect, queueParams, "my_key", processor, Some(ChannelParameters(qos = 1)))
+  ConnectionOwner.createChildActor(conn, RpcServer.props(queueParams, StandardExchanges.amqDirect,  "my_key", processor, ChannelParameters(qos = 1)))
 }

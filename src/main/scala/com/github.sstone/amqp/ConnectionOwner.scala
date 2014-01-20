@@ -1,17 +1,16 @@
 package com.github.sstone.amqp
 
-import scala.util.{Failure, Success, Try}
+import Amqp._
+import akka.actor._
+import akka.event.LoggingReceive
+import akka.pattern.ask
+import akka.util.Timeout
+import com.rabbitmq.client.{Connection, ShutdownSignalException, ShutdownListener, ConnectionFactory, Address => RMQAddress}
 import concurrent.Await
 import concurrent.duration._
-import java.io.IOException
-import akka.util.Timeout
-import akka.actor._
-import akka.pattern.ask
-import com.rabbitmq.client.{Connection, ShutdownSignalException, ShutdownListener, ConnectionFactory, Address => RMQAddress}
-import Amqp._
 import java.util.concurrent.ExecutorService
-import akka.event.LoggingReceive
-
+import scala.util.{Failure, Success, Try}
+import collection.JavaConversions._
 
 object ConnectionOwner {
 
@@ -60,6 +59,7 @@ object ConnectionOwner {
 }
 
 /**
+ * @deprecated("use ConnectionOwner directly instead")
  * Helper class that encapsulates a connection owner so that it is easier to manipulate
  * @param host
  * @param port
@@ -135,6 +135,7 @@ class ConnectionOwner(connFactory: ConnectionFactory,
 
   import ConnectionOwner._
   import context.dispatcher
+
   var connection: Option[Connection] = None
   var statusListener: Option[ActorRef] = None
   val reconnectTimer = context.system.scheduler.schedule(10 milliseconds, reconnectionDelay, self, 'connect)

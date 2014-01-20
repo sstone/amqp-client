@@ -42,7 +42,7 @@ So it kind of works and will be maintained for some time :-)
   <dependency>
     <groupId>com.github.sstone</groupId>
     <artifactId>amqp-client_SCALA-VERSION</artifactId>
-    <version>1.3-ML1</version>
+    <version>1.3-ML3</version>
   </dependency>
   <dependency>
     <groupId>com.typesafe.akka</groupId>
@@ -56,7 +56,7 @@ So it kind of works and will be maintained for some time :-)
 Please note that the Akka dependency is now in the "provided" scope which means that you'll have to define it explicitly in your
 maven/sbt projects. 
 
-The latest snapshot (development) version is 1.3-SNAPSHOT, the latest released version is 1.2, the latest milestone is 1.3-ML1
+The latest snapshot (development) version is 1.3-SNAPSHOT, the latest released version is 1.2, the latest milestone is 1.3-ML3
 
 * amqp-client 1.0 is compatible with Scala 2.9.2 and Akka 2.0.3
 * amqp-client 1.1 is compatible with Scala 2.9.2 and Akka 2.0.5
@@ -82,7 +82,7 @@ also [there](http://www.zeromq.org/whitepapers:amqp-analysis), and probably many
 * AMQP channels are multiplexed over AMQP connections. You use channels to publish and consume messages. Channels are managed
 by ChannelOwner objects.
 
-ConnectionOwner and ChannelOwner are implemened as Akka actors, using Akka supervision and the very useful Akka FSM:
+ConnectionOwner and ChannelOwner are implemened as Akka actors:
 * channel owners are created by connection owners
 * when a connection is lost, the connection owner will create a new connection and provide each of its children with a
 new channel
@@ -97,14 +97,17 @@ YMMV, but using few connections (one per JVM) and many channels per connection (
 As explained above, this is an actor-based wrapper around the RabbitMQ client, with 2 main classes: ConnectionOwner and
 ChannelOwner. Instead of calling the RabbitMQ [Channel](http://www.rabbitmq.com/releases/rabbitmq-java-client/v3.1.1/rabbitmq-java-client-javadoc-3.1.1/com/rabbitmq/client/Channel.html)
 interface, you send a message to a ChannelOwner actor, which replies with whatever the java client returned wrapped in an Amqp.Ok()
-message if the call was successfull, or an Amqp.Error if it failed.
+message if the call was successful, or an Amqp.Error if it failed.
 
 For example, to declare a queue you could write:
 
 ``` scala
 
-  val conn = new RabbitMQConnection(host = "localhost", name = "Connection")
-  val channel = conn.createChannelOwner()
+  val connFactory = new ConnectionFactory()
+  connFactory.setUri("amqp://guest:guest@localhost/%2F")
+  val conn = system.actorOf(ConnectionOwner.props(connFactory, 1 second))
+  val channel = ConnectionOwner.createChildActor(conn, ChannelOwner.props())
+
   channel ! DeclareQueue(QueueParameters("my_queue", passive = false, durable = false, exclusive = false, autodelete = true))
 
 ```
@@ -113,8 +116,11 @@ Or, if you want to check the number of messages in a queue:
 
 ``` scala
 
-  val conn = new RabbitMQConnection(host = "localhost", name = "Connection")
-  val channel = conn.createChannelOwner()
+  val connFactory = new ConnectionFactory()
+  connFactory.setUri("amqp://guest:guest@localhost/%2F")
+  val conn = system.actorOf(ConnectionOwner.props(connFactory, 1 second))
+  val channel = ConnectionOwner.createChildActor(conn, ChannelOwner.props())
+
   val Amqp.Ok(_, Some(result: Queue.DeclareOk)) = Await.result(
     (channel ? DeclareQueue(QueueParameters(name = "my_queue", passive = true))).mapTo[Amqp.Ok],
     5 seconds
@@ -141,10 +147,9 @@ Here, queues and bindings will be gone if the connection is lost and restored:
 
 ``` scala
 
-  implicit val system = ActorSystem("mySystem")
-
-  // create an AMQP connection
-  val conn = new RabbitMQConnection(host = "localhost", name = "Connection")
+  val connFactory = new ConnectionFactory()
+  connFactory.setUri("amqp://guest:guest@localhost/%2F")
+  val conn = system.actorOf(ConnectionOwner.props(connFactory, 1 second))
 
   // create an actor that will receive AMQP deliveries
   val listener = system.actorOf(Props(new Actor {
@@ -158,7 +163,7 @@ Here, queues and bindings will be gone if the connection is lost and restored:
 
   // create a consumer that will route incoming AMQP messages to our listener
   // it starts with an empty list of queues to consume from
-  val consumer = conn.createChild(Props(new Consumer(listener = Some(listener))))
+  val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(listener, channelParams = None, autoack = false))
 
   // wait till everyone is actually connected to the broker
   Amqp.waitForConnection(system, consumer).await()
@@ -181,13 +186,14 @@ We can initialize our consumer with a list of messages that will be replayed eac
 
 ``` scala
 
-  val consumer = conn.createChild(Props(new Consumer(
-    init = List(AddBinding(Binding(StandardExchanges.amqDirect, QueueParameters("my_queue", passive = false, durable = false, exclusive = false, autodelete = true), "my_key"))),
-    listener = Some(listener))))
+ val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(
+    listener = Some(listener),
+    init = List(AddBinding(Binding(StandardExchanges.amqDirect, queueParams, "my_key")))
+  ), name = Some("consumer"))
 
 ```
 
-Or can can wrap our initlization messages with Record to make sure they will be replayed each time its receives a new channel:
+Or can can wrap our initialization messages with Record to make sure they will be replayed each time its receives a new channel:
 
 ``` scala
 
@@ -207,9 +213,9 @@ on the default exchange)
 ### Distributed Worker Pattern
 
 This is one of the simplest but most useful pattern: using a shared queue to distributed work among consumers.
-The broker will load-balance messsages between these consumers using round-robin distribution, which can be combined with 'prefetch' channel settings.
+The broker will load-balance messages between these consumers using round-robin distribution, which can be combined with 'prefetch' channel settings.
 Setting 'prefetch' to 1 is very useful if you need resource-based (CPU, ...) load-balancing.
-You will typicall use explicit ackowledgments and ack messages once they have been processed and the response has been sent. This
+You will typically use explicit acknowledgments and ack messages once they have been processed and the response has been sent. This
 way, if your consumer fails to process the request or is disconnected, the broker will re-send the same request to another consumer.
 
 ``` scala
@@ -217,7 +223,9 @@ way, if your consumer fails to process the request or is disconnected, the broke
   implicit val system = ActorSystem("mySystem")
 
   // create an AMQP connection
-  val conn = new RabbitMQConnection(host = "localhost", name = "Connection")
+  val connFactory = new ConnectionFactory()
+  connFactory.setUri("amqp://guest:guest@localhost/%2F")
+  val conn = system.actorOf(ConnectionOwner.props(connFactory, 1 second))
 
   val queueParams = QueueParameters("my_queue", passive = false, durable = false, exclusive = false, autodelete = true)
 
@@ -234,10 +242,10 @@ way, if your consumer fails to process the request or is disconnected, the broke
       }
       def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(None) // we don't return anything
     }
-    conn.createRpcServer(StandardExchanges.amqDirect, queueParams, "my_key", processor, Some(ChannelParameters(qos = 1)))
+    ConnectionOwner.createChildActor(conn, RpcServer.props(queueParams, StandardExchanges.amqDirect,  "my_key", processor, ChannelParameters(qos = 1)))
   }
 
-  val rpcClient = conn.createRpcClient()
+  val rpcClient = ConnectionOwner.createChildActor(conn, RpcClient.props())
 
   // wait till everyone is actually connected to the broker
   Amqp.waitForConnection(system, rpcServers: _*).await()
@@ -249,12 +257,11 @@ way, if your consumer fails to process the request or is disconnected, the broke
     val request = ("request " + i).getBytes
     val f = (rpcClient ? Request(List(Publish("amq.direct", "my_key", request)))).mapTo[RpcClient.Response]
     f.onComplete {
-      case Right(response) => println(new String(response.deliveries.head.body))
-      case Left(error) => println(error)
+      case Success(response) => println(new String(response.deliveries.head.body))
+      case Failure(error) => println(error)
     }
   }
   // wait 10 seconds and shut down
-  // run the Producer sample now and see what happens
   Thread.sleep(10000)
   system.shutdown()
 
@@ -274,7 +281,9 @@ This is very useful if you want to break a single operation into multiple, paral
   implicit val system = ActorSystem("mySystem")
 
   // create an AMQP connection
-  val conn = new RabbitMQConnection(host = "localhost", name = "Connection")
+  val connFactory = new ConnectionFactory()
+  connFactory.setUri("amqp://guest:guest@localhost/%2F")
+  val conn = system.actorOf(ConnectionOwner.props(connFactory, 1 second))
 
   // typical "reply queue"; the name if left empty: the broker will generate a new random name
   val privateReplyQueue = QueueParameters("", passive = false, durable = false, exclusive = true, autodelete = true)
@@ -295,10 +304,10 @@ This is very useful if you want to break a single operation into multiple, paral
       }
       def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(None) // we don't return anything
     }
-    conn.createRpcServer(StandardExchanges.amqDirect, privateReplyQueue, "my_key", processor, Some(ChannelParameters(qos = 1)))
+    ConnectionOwner.createChildActor(conn, RpcServer.props(privateReplyQueue, StandardExchanges.amqDirect,  "my_key", processor, ChannelParameters(qos = 1)))
   }
 
-  val rpcClient = conn.createRpcClient()
+  val rpcClient = ConnectionOwner.createChildActor(conn, RpcClient.props())
 
   // wait till everyone is actually connected to the broker
   Amqp.waitForConnection(system, rpcServers: _*).await()
@@ -310,14 +319,13 @@ This is very useful if you want to break a single operation into multiple, paral
     val request = ("request " + i).getBytes
     val f = (rpcClient ? Request(List(Publish("amq.direct", "my_key", request)), 3)).mapTo[RpcClient.Response]
     f.onComplete {
-      case Right(response) => {
+      case Success(response) => {
         response.deliveries.foreach(delivery => println(new String(delivery.body)))
       }
-      case Left(error) => println(error)
+      case Failure(error) => println(error)
     }
   }
   // wait 10 seconds and shut down
-  // run the Producer sample now and see what happens
   Thread.sleep(10000)
   system.shutdown()
 

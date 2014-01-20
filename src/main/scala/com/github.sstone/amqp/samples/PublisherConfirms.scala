@@ -1,10 +1,12 @@
 package com.github.sstone.amqp.samples
 
-import scala.concurrent.{Future, ExecutionContext}
 import akka.actor.{Props, Actor, ActorSystem}
-import com.github.sstone.amqp.{Amqp, RabbitMQConnection}
+import com.github.sstone.amqp.{ChannelOwner, ConnectionOwner, Amqp, RabbitMQConnection}
 import com.github.sstone.amqp.Amqp._
 import com.github.sstone.amqp.RpcServer.{ProcessResult, IProcessor}
+import com.rabbitmq.client.ConnectionFactory
+import scala.concurrent.{Future, ExecutionContext}
+import scala.concurrent.duration._
 
 object PublisherConfirms extends App {
   import ExecutionContext.Implicits.global
@@ -12,9 +14,11 @@ object PublisherConfirms extends App {
   implicit val system = ActorSystem("mySystem")
 
   // create an AMQP connection
-  val conn = new RabbitMQConnection(host = "localhost", name = "Connection")
+  val connFactory = new ConnectionFactory()
+  connFactory.setUri("amqp://guest:guest@localhost/%2F")
+  val conn = system.actorOf(ConnectionOwner.props(connFactory, 1 second))
 
-  val producer = conn.createChannelOwner()
+  val producer = ConnectionOwner.createChildActor(conn, ChannelOwner.props())
   Amqp.waitForConnection(system, producer).await()
 
   class Foo extends Actor {

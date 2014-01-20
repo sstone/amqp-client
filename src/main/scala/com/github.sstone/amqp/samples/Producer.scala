@@ -1,20 +1,24 @@
 package com.github.sstone.amqp.samples
 
 import akka.actor.ActorSystem
-import com.github.sstone.amqp.{Amqp, RabbitMQConnection}
+import com.github.sstone.amqp.{ChannelOwner, ConnectionOwner, Amqp, RabbitMQConnection}
+import com.github.sstone.amqp.Amqp._
+import com.rabbitmq.client.ConnectionFactory
 import com.github.sstone.amqp.Amqp.Publish
+import java.util.concurrent.TimeUnit
+import scala.concurrent.duration._
 
 object Producer extends App {
   implicit val system = ActorSystem("mySystem")
 
   // create an AMQP connection
-  val conn = new RabbitMQConnection(host = "localhost", name = "Connection")
-
-  // create a "channel owner" on this connection
-  val producer = conn.createChannelOwner()
+  val connFactory = new ConnectionFactory()
+  connFactory.setUri("amqp://guest:guest@localhost/%2F")
+  val conn = system.actorOf(ConnectionOwner.props(connFactory, 1 second))
+  val producer = ConnectionOwner.createChildActor(conn, ChannelOwner.props())
 
   // wait till everyone is actually connected to the broker
-  Amqp.waitForConnection(system, producer).await()
+  waitForConnection(system, conn, producer).await(5, TimeUnit.SECONDS)
 
   // send a message
   producer ! Publish("amq.direct", "my_key", "yo!!".getBytes, properties = None, mandatory = true, immediate = false)

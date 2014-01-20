@@ -1,35 +1,42 @@
 package com.github.sstone.amqp.samples
 
-import concurrent.duration._
-import concurrent.ExecutionContext.Implicits.global
-import akka.actor.{Props, ActorSystem}
-import akka.pattern.ask
-import akka.util.Timeout
-import com.github.sstone.amqp.{Amqp, ChannelOwner, RabbitMQConnection}
-import com.github.sstone.amqp.Amqp.{QueueParameters, DeclareQueue}
+import akka.actor.{ActorRef, Actor, Props, ActorSystem}
+import com.github.sstone.amqp.Amqp.{AddStatusListener, QueueParameters, DeclareQueue}
+import com.github.sstone.amqp.ConnectionOwner.Create
+import com.github.sstone.amqp.{ConnectionOwner, Amqp, ChannelOwner}
 import com.rabbitmq.client.AMQP.Queue
-import scala.concurrent.Await
+import com.rabbitmq.client.ConnectionFactory
+import concurrent.duration._
 
+class AdminActor extends Actor {
+  val connFactory = new ConnectionFactory()
+  val conn = context.actorOf(ConnectionOwner.props(connFactory, reconnectionDelay = 10 seconds))
+  conn ! AddStatusListener(self)
+
+  def receive = {
+    case ConnectionOwner.Connected => conn ! Create(ChannelOwner.props(), name = Some("channel"))
+    case channel: ActorRef => {
+      channel ! AddStatusListener(self)
+      context.become(pending(channel))
+    }
+  }
+
+  def pending(channel: ActorRef) : Receive = {
+    case ChannelOwner.Connected => {
+      channel ! DeclareQueue(QueueParameters(name = "my_queue", passive = true))
+      context.become(connected(channel))
+    }
+  }
+
+  def connected(channel: ActorRef) : Receive = {
+    case Amqp.Ok(request: DeclareQueue, Some(result: Queue.DeclareOk)) => {
+      println(s"there are ${result.getMessageCount} in queue ${result.getQueue}")
+      context.system.shutdown()
+    }
+  }
+}
 
 object Admin extends App {
   implicit val system = ActorSystem("mySystem")
-  implicit val timeout: Timeout = 5 seconds
-  // create an AMQP connection
-  val conn = new RabbitMQConnection(host = "localhost", name = "Connection")
-
-  val channel = conn.createChild(Props(new ChannelOwner()), Some("Channel"))
-
-  // wait till everyone is actually connected to the broker
-  Amqp.waitForConnection(system, channel).await()
-
-  // check the number of messages in the queue
-  val Amqp.Ok(_, Some(result: Queue.DeclareOk)) = Await.result((channel ? DeclareQueue(QueueParameters(name = "my_queue", passive = true))).mapTo[Amqp.Ok], 5 seconds)
-  println("there are %d messages in the queue named %s".format(result.getMessageCount, result.getQueue))
-
-  for {
-    Amqp.Ok(_, Some(result: Queue.DeclareOk)) <- (channel ? DeclareQueue(QueueParameters(name = "my_queue", passive = true))).mapTo[Amqp.Ok]
-  } yield {
-    println("there are %d messages in the queue named %s".format(result.getMessageCount, result.getQueue))
-    system.shutdown()
-  }
+  system.actorOf(Props[AdminActor])
 }

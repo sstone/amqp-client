@@ -1,14 +1,18 @@
 package com.github.sstone.amqp.samples
 
 import akka.actor.{Actor, Props, ActorSystem}
-import com.github.sstone.amqp.{Amqp, Consumer, RabbitMQConnection}
+import com.github.sstone.amqp.{ConnectionOwner, Amqp, Consumer, RabbitMQConnection}
 import com.github.sstone.amqp.Amqp._
+import com.rabbitmq.client.ConnectionFactory
+import scala.concurrent.duration._
 
 object Consumer2 extends App {
   implicit val system = ActorSystem("mySystem")
 
   // create an AMQP connection
-  val conn = new RabbitMQConnection(host = "localhost", name = "Connection")
+  val connFactory = new ConnectionFactory()
+  connFactory.setUri("amqp://guest:guest@localhost/%2F")
+  val conn = system.actorOf(ConnectionOwner.props(connFactory, 1 second))
 
   // create an actor that will receive AMQP deliveries
   val listener = system.actorOf(Props(new Actor {
@@ -25,9 +29,11 @@ object Consumer2 extends App {
 
   // we initialize our consumer with an AddBinding request: the queue and the binding will be recreated if the connection
   // to the broker is lost and restored
-  val consumer = conn.createChild(Props(new Consumer(
-    init = List(AddBinding(Binding(StandardExchanges.amqDirect, queueParams, "my_key"))),
-    listener = Some(listener))))
+  val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(
+    listener = Some(listener),
+    init = List(AddBinding(Binding(StandardExchanges.amqDirect, queueParams, "my_key")))
+  ), name = Some("consumer"))
+
   // wait till everyone is actually connected to the broker
   Amqp.waitForConnection(system, consumer).await()
 

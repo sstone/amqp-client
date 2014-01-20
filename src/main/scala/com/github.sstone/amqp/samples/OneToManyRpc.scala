@@ -2,7 +2,7 @@ package com.github.sstone.amqp.samples
 
 import akka.pattern.ask
 import akka.actor.{Actor, Props, ActorSystem}
-import com.github.sstone.amqp.{RpcClient, Amqp, RabbitMQConnection}
+import com.github.sstone.amqp._
 import com.github.sstone.amqp.Amqp._
 import com.github.sstone.amqp.RpcServer.{ProcessResult, IProcessor}
 import com.github.sstone.amqp.RpcClient.Request
@@ -10,6 +10,15 @@ import akka.util.Timeout
 import concurrent.{ExecutionContext, Future}
 import concurrent.duration._
 import util.{Failure, Success}
+import com.rabbitmq.client.ConnectionFactory
+import com.github.sstone.amqp.RpcServer.ProcessResult
+import com.github.sstone.amqp.Amqp.Publish
+import scala.util.Success
+import com.github.sstone.amqp.Amqp.ChannelParameters
+import scala.util.Failure
+import scala.Some
+import com.github.sstone.amqp.Amqp.QueueParameters
+import com.github.sstone.amqp.Amqp.Delivery
 
 object OneToManyRpc extends App {
   import ExecutionContext.Implicits.global
@@ -18,7 +27,9 @@ object OneToManyRpc extends App {
   implicit val system = ActorSystem("mySystem")
 
   // create an AMQP connection
-  val conn = new RabbitMQConnection(host = "localhost", name = "Connection")
+  val connFactory = new ConnectionFactory()
+  connFactory.setUri("amqp://guest:guest@localhost/%2F")
+  val conn = system.actorOf(ConnectionOwner.props(connFactory, 1 second))
 
   // typical "reply queue"; the name if left empty: the broker will generate a new random name
   val privateReplyQueue = QueueParameters("", passive = false, durable = false, exclusive = true, autodelete = true)
@@ -39,10 +50,10 @@ object OneToManyRpc extends App {
       }
       def onFailure(delivery: Delivery, e: Throwable) = ProcessResult(None) // we don't return anything
     }
-    conn.createRpcServer(StandardExchanges.amqDirect, privateReplyQueue, "my_key", processor, Some(ChannelParameters(qos = 1)))
+    ConnectionOwner.createChildActor(conn, RpcServer.props(privateReplyQueue, StandardExchanges.amqDirect,  "my_key", processor, ChannelParameters(qos = 1)))
   }
 
-  val rpcClient = conn.createRpcClient()
+  val rpcClient = ConnectionOwner.createChildActor(conn, RpcClient.props())
 
   // wait till everyone is actually connected to the broker
   Amqp.waitForConnection(system, rpcServers: _*).await()
