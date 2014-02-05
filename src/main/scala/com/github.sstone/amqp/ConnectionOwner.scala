@@ -199,6 +199,8 @@ class ConnectionOwner(connFactory: ConnectionFactory,
      */
     case AddStatusListener(listener) => statusListener = Some(listener)
 
+    case RemoveStatusListener() => statusListener = None
+
     /**
      * create a "channel aware" child actor
      */
@@ -223,6 +225,7 @@ class ConnectionOwner(connFactory: ConnectionFactory,
       statusListener = Some(listener)
       listener ! Connected
     }
+    case RemoveStatusListener() => statusListener = None
     case Create(props, name) => {
       sender ! createChild(props, name)
     }

@@ -185,6 +185,7 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
       requestLog :+= request
     }
     case AddStatusListener(actor) => statusListener = Some(actor)
+    case RemoveStatusListener() => statusListener = None
   }
 
   def connected(channel: Channel, forwarder: ActorRef): Receive = LoggingReceive {
@@ -197,6 +198,7 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
       statusListener = Some(actor)
       actor ! Connected
     }
+    case RemoveStatusListener() => statusListener = None
     case request: Request => {
       forwarder forward request
     }
