@@ -84,8 +84,6 @@ object Amqp {
 
   case class AddStatusListener(listener: ActorRef) extends Request
 
-  case class RemoveStatusListener() extends Request
-
   case class AddReturnListener(listener: ActorRef) extends Request
 
   case class AddShutdownListener(listener: ActorRef) extends Request
@@ -199,7 +197,6 @@ object Amqp {
       def receive = {
         case ChannelOwner.Connected | ConnectionOwner.Connected =>
           onConnected()
-          channelOrConnectionActor ! RemoveStatusListener()
           context.stop(self)
       }
     }))

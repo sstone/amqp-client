@@ -142,6 +142,14 @@ class ConnectionOwner(connFactory: ConnectionFactory,
 
   override def postStop = connection.map(c => Try(c.close()))
 
+  override def unhandled(message: Any): Unit = message match {
+    case Terminated(actor) if statusListener == Some(actor) => {
+      context.unwatch(actor)
+      statusListener = None
+    }
+    case _ => super.unhandled(message)
+  }
+
   /**
    * ask this connection owner to create a "channel aware" child
    * @param props actor creation properties
@@ -197,9 +205,7 @@ class ConnectionOwner(connFactory: ConnectionFactory,
     /**
      * add a status listener that will be sent Disconnected and Connected messages
      */
-    case AddStatusListener(listener) => statusListener = Some(listener)
-
-    case RemoveStatusListener() => statusListener = None
+    case AddStatusListener(listener) => addStatusListener(listener)
 
     /**
      * create a "channel aware" child actor
@@ -222,10 +228,9 @@ class ConnectionOwner(connFactory: ConnectionFactory,
       }
     }
     case AddStatusListener(listener) => {
-      statusListener = Some(listener)
+      addStatusListener(listener)
       listener ! Connected
     }
-    case RemoveStatusListener() => statusListener = None
     case Create(props, name) => {
       sender ! createChild(props, name)
     }
@@ -236,6 +241,12 @@ class ConnectionOwner(connFactory: ConnectionFactory,
       self ! 'connect
       context.become(disconnected)
     }
+  }
+
+  private def addStatusListener(listener: ActorRef) {
+    statusListener.map(context.unwatch)
+    context.watch(listener)
+    statusListener = Some(listener)
   }
 }
 
