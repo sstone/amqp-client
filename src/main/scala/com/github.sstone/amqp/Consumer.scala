@@ -59,6 +59,7 @@ class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[R
       log.debug("processing %s".format(request))
       sender ! withChannel(channel, request)(c => {
         val queueName = declareQueue(c, binding.queue).getQueue
+        declareExchange(c, binding.exchange)
         c.queueBind(queueName, binding.exchange.name, binding.routingKey)
         val consumerTag = c.basicConsume(queueName, autoack, consumer.get)
         log.debug(s"using consumer $consumerTag")

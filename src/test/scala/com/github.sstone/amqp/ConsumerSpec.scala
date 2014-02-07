@@ -81,13 +81,40 @@ class ConsumerSpec extends ChannelSpec {
       producer ! Publish(exchange.name, "my_key", message)
       probe.expectMsgClass(1.second, classOf[Delivery])
 
-      // crash the consumer's channem  
+      // crash the consumer's channel
       consumer ! DeclareExchange(ExchangeParameters(name = "foo", passive = true, exchangeType =""))
+      receiveOne(1 second)
       probe.expectMsgAllOf(1 second, ChannelOwner.Disconnected, ChannelOwner.Connected)
       Thread.sleep(100)
 
       producer ! Publish(exchange.name, "my_key", message)
       probe.expectMsgClass(1.second, classOf[Delivery])
+    }
+    "declare queues and bindings" in {
+      // passive = false means that the consumer will create the exchange
+      val exchange = ExchangeParameters(name = randomExchangeName, exchangeType = "direct", passive = false, durable = false, autodelete = true)
+      val queue = randomQueue
+      val probe = TestProbe()
+      ignoreMsg {
+        case Amqp.Ok(p:Publish, _) => true
+      }
+      val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(listener = Some(probe.ref)), timeout = 5000 millis)
+      val producer = ConnectionOwner.createChildActor(conn, ChannelOwner.props())
+      consumer ! AddStatusListener(probe.ref)
+      producer ! AddStatusListener(probe.ref)
+      probe.expectMsg(1 second, ChannelOwner.Connected)
+      probe.expectMsg(1 second, ChannelOwner.Connected)
+      consumer ! AddBinding(Binding(exchange, queue, "test_key"))
+      val Amqp.Ok(AddBinding(_), _) = receiveOne(1 second)
+
+      // check that our exchange was created
+      val exchange1 = exchange.copy(passive = true)
+      consumer ! DeclareExchange(exchange1)
+      val Amqp.Ok(DeclareExchange(_), _) = receiveOne(1 second)
+
+      // check that publishing works
+      producer ! Publish(exchange.name, "test_key", "test message".getBytes("UTF-8"))
+      probe.expectMsgClass(1 second, classOf[Delivery])
     }
   }
 }
