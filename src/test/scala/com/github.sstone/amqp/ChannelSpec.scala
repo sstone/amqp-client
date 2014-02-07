@@ -24,6 +24,8 @@ class ChannelSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec with 
 
   def randomQueueName = "queue" + random.nextInt()
 
+  def randomExchangeName = "exchange" + random.nextInt()
+
   def randomQueue = QueueParameters(name = randomQueueName, passive = false, exclusive = false)
 
   def randomKey = "key" + random.nextInt()
