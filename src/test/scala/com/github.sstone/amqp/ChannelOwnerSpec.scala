@@ -3,8 +3,8 @@ package com.github.sstone.amqp
 import org.scalatest.junit.JUnitRunner
 import org.junit.runner.RunWith
 import akka.testkit.TestProbe
-import akka.actor.DeadLetter
-import java.util.concurrent.TimeUnit
+import akka.actor.{Props, Actor, DeadLetter}
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 import concurrent.duration._
 import com.rabbitmq.client.AMQP.Queue
 import com.github.sstone.amqp.Amqp._
@@ -64,16 +64,22 @@ class ChannelOwnerSpec extends ChannelSpec  {
 
 
   "remove a status listener when it terminates" in {
+    val latch = new CountDownLatch(1)
+
+    val statusListenerProbe = system.actorOf(Props(new Actor {
+      def receive = {
+        case ChannelOwner.Connected => latch.countDown()
+        case _ => fail("Status listener did not detect channel connection")
+      }
+    }))
+
+    latch.await(3, TimeUnit.SECONDS)
+    channelOwner ! AddStatusListener(statusListenerProbe)
+
     val deadletterProbe = TestProbe()
     system.eventStream.subscribe(deadletterProbe.ref, classOf[DeadLetter])
 
-    val statusListenerProbe = TestProbe()
-
-    channelOwner ! AddStatusListener(statusListenerProbe.ref)
-
-    statusListenerProbe.expectMsg(3 seconds, ChannelOwner.Connected)
-
-    system.stop(statusListenerProbe.ref)
+    system.stop(statusListenerProbe)
 
     channelOwner ! DeclareQueue(QueueParameters("NO_SUCH_QUEUE", passive = true))
 
