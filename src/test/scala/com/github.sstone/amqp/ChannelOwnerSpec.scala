@@ -9,6 +9,7 @@ import concurrent.duration._
 import com.rabbitmq.client.AMQP.Queue
 import com.github.sstone.amqp.Amqp._
 import com.rabbitmq.client.GetResponse
+import com.github.sstone.amqp.ChannelOwner.NotConnectedError
 
 @RunWith(classOf[JUnitRunner])
 class ChannelOwnerSpec extends ChannelSpec  {
@@ -60,6 +61,32 @@ class ChannelOwnerSpec extends ChannelSpec  {
     channelOwner ! Publish("", "no_such_queue", "test".getBytes)
     val Amqp.Ok(_, None) = receiveOne(1 seconds)
     expectMsgClass(1 seconds, classOf[ReturnedMessage])
+  }
+
+  "return requests when not connected" in {
+    channelOwner ! AddStatusListener(self)
+
+    expectMsgPF() {
+      case ChannelOwner.Connected => true
+    }
+
+    // Force channel to close by inducing an error
+    channelOwner ! DeclareQueue(QueueParameters("NO_SUCH_QUEUE", passive = true))
+
+    expectMsgPF() {
+      case Error(DeclareQueue(QueueParameters(_,_, _, _, _, _)),_) => true
+    }
+
+    expectMsgPF() {
+      case ChannelOwner.Disconnected => true
+    }
+
+    val testRequest = DeclareQueue(QueueParameters("my_test_queue", passive = false))
+    channelOwner ! testRequest
+
+    expectMsgPF() {
+      case NotConnectedError(testRequest) => true
+    }
   }
 
   "Multiple ChannelOwners" should {
