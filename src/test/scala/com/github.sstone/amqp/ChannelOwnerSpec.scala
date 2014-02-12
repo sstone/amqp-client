@@ -3,7 +3,7 @@ package com.github.sstone.amqp
 import org.scalatest.junit.JUnitRunner
 import org.junit.runner.RunWith
 import akka.testkit.TestProbe
-import akka.actor.Props
+import akka.actor.DeadLetter
 import java.util.concurrent.TimeUnit
 import concurrent.duration._
 import com.rabbitmq.client.AMQP.Queue
@@ -60,6 +60,24 @@ class ChannelOwnerSpec extends ChannelSpec  {
     channelOwner ! Publish("", "no_such_queue", "test".getBytes)
     val Amqp.Ok(_, None) = receiveOne(1 seconds)
     expectMsgClass(1 seconds, classOf[ReturnedMessage])
+  }
+
+
+  "remove a status listener when it terminates" in {
+    val deadletterProbe = TestProbe()
+    system.eventStream.subscribe(deadletterProbe.ref, classOf[DeadLetter])
+
+    val statusListenerProbe = TestProbe()
+
+    channelOwner ! AddStatusListener(statusListenerProbe.ref)
+
+    statusListenerProbe.expectMsg(3 seconds, ChannelOwner.Connected)
+
+    system.stop(statusListenerProbe.ref)
+
+    channelOwner ! DeclareQueue(QueueParameters("NO_SUCH_QUEUE", passive = true))
+
+    deadletterProbe.expectNoMsg(1 second)
   }
 
   "Multiple ChannelOwners" should {
