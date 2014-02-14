@@ -159,9 +159,15 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
 
   override def preStart() = context.parent ! ConnectionOwner.CreateChannel
 
-  override def unhandled(message: Any): Unit = {
-    log.warning(s"unhandled message $message")
-    super.unhandled(message)
+  override def unhandled(message: Any): Unit = message match {
+    case Terminated(actor) if statusListener == Some(actor) => {
+      context.unwatch(actor)
+      statusListener = None
+    }
+    case _ => {
+      log.warning(s"unhandled message $message")
+      super.unhandled(message)
+    }
   }
 
   def onChannel(channel: Channel, forwarder: ActorRef): Unit = {
@@ -184,7 +190,7 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
     case Record(request: Request) => {
       requestLog :+= request
     }
-    case AddStatusListener(actor) => statusListener = Some(actor)
+    case AddStatusListener(actor) => addStatusListener(actor)
   }
 
   def connected(channel: Channel, forwarder: ActorRef): Receive = LoggingReceive {
@@ -193,9 +199,9 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
       requestLog :+= request
       self forward request
     }
-    case AddStatusListener(actor) => {
-      statusListener = Some(actor)
-      actor ! Connected
+    case AddStatusListener(listener) => {
+      addStatusListener(listener)
+      listener ! Connected
     }
     case request: Request => {
       forwarder forward request
@@ -207,5 +213,11 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
       statusListener.map(a => a ! Disconnected)
       context.become(disconnected)
     }
+  }
+
+  private def addStatusListener(listener: ActorRef) {
+    statusListener.map(context.unwatch)
+    context.watch(listener)
+    statusListener = Some(listener)
   }
 }
