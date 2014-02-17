@@ -53,7 +53,7 @@ class RpcClient(channelParams: Option[ChannelParameters] = None) extends Channel
     }
   }: Receive) orElse super.disconnected
 
-  override def connected(channel: Channel, forwarder: ActorRef): Receive = LoggingReceive ({
+  override def connected(channel: Channel, forwarder: ActorRef): Receive = LoggingReceive({
     case Request(publish, numberOfResponses) => {
       counter = counter + 1
       log.debug(s"sending ${publish.size} messages, replyTo = $queue")

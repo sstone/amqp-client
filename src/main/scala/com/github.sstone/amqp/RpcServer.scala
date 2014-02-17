@@ -6,6 +6,7 @@ import com.rabbitmq.client.{Envelope, Channel}
 import concurrent.{ExecutionContext, Future}
 import util.{Failure, Success}
 import akka.actor.{ActorRef, Props}
+import akka.event.LoggingReceive
 
 object RpcServer {
 
@@ -75,7 +76,7 @@ class RpcServer(processor: RpcServer.IProcessor, init: Seq[Request] = Seq.empty[
     }
   }
 
-  override def connected(channel: Channel, forwarder: ActorRef) : Receive =  ({
+  override def connected(channel: Channel, forwarder: ActorRef) : Receive = LoggingReceive({
     case delivery@Delivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]) => {
       log.debug("processing delivery")
       processor.process(delivery).onComplete {

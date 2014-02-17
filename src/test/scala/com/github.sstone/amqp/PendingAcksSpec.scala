@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit
 @RunWith(classOf[JUnitRunner])
 class PendingAcksSpec extends ChannelSpec with WordSpec {
   "consumers" should {
-    "receive messages that were delivered to another consumer that crashed before if ack'ed them" in {
+    "receive messages that were delivered to another consumer that crashed before it acked them" in {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = randomQueue
       val routingKey = randomKey
