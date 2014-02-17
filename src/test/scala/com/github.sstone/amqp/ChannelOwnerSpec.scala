@@ -70,6 +70,8 @@ class ChannelOwnerSpec extends ChannelSpec  {
     channelOwner ! AddStatusListener(probe2.ref)
     probe1.expectMsg(ChannelOwner.Connected)
     probe2.expectMsg(ChannelOwner.Connected)
+    system.stop(probe1.ref)
+    system.stop(probe2.ref)
   }
 
   "remove a status listener when it terminates" in {
