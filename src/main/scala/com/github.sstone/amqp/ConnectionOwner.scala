@@ -137,15 +137,16 @@ class ConnectionOwner(connFactory: ConnectionFactory,
   import context.dispatcher
 
   var connection: Option[Connection] = None
-  var statusListener: Option[ActorRef] = None
+  val statusListeners = collection.mutable.HashSet.empty[ActorRef]
+
   val reconnectTimer = context.system.scheduler.schedule(10 milliseconds, reconnectionDelay, self, 'connect)
 
   override def postStop = connection.map(c => Try(c.close()))
 
   override def unhandled(message: Any): Unit = message match {
-    case Terminated(actor) if statusListener == Some(actor) => {
+    case Terminated(actor) if statusListeners.contains(actor) => {
       context.unwatch(actor)
-      statusListener = None
+      statusListeners.remove(actor)
     }
     case _ => super.unhandled(message)
   }
@@ -191,7 +192,7 @@ class ConnectionOwner(connFactory: ConnectionFactory,
       Try(createConnection) match {
         case Success(conn) => {
           log.info(s"connected to ${toUri(connFactory)}")
-          statusListener.map(a => a ! Connected)
+          statusListeners.map(a => a ! Connected)
           connection = Some(conn)
           context.children.foreach(_ ! conn.createChannel())
           context.become(connected(conn))
@@ -244,9 +245,10 @@ class ConnectionOwner(connFactory: ConnectionFactory,
   }
 
   private def addStatusListener(listener: ActorRef) {
-    statusListener.map(context.unwatch)
-    context.watch(listener)
-    statusListener = Some(listener)
+    if (!statusListeners.contains(listener)) {
+      context.watch(listener)
+      statusListeners.add(listener)
+    }
   }
 }
 

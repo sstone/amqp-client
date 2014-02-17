@@ -9,6 +9,7 @@ import scala.util.Try
 import scala.util.Failure
 import scala.util.Success
 import akka.event.LoggingReceive
+import scala.collection.mutable
 
 object ChannelOwner {
 
@@ -155,14 +156,14 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
   import ChannelOwner._
 
   var requestLog: Vector[Request] = init.toVector
-  var statusListener: Option[ActorRef] = None
+  val statusListeners = mutable.HashSet.empty[ActorRef]
 
   override def preStart() = context.parent ! ConnectionOwner.CreateChannel
 
   override def unhandled(message: Any): Unit = message match {
-    case Terminated(actor) if statusListener == Some(actor) => {
+    case Terminated(actor) if statusListeners.contains(actor) => {
       context.unwatch(actor)
-      statusListener = None
+      statusListeners.remove(actor)
     }
     case _ => {
       log.warning(s"unhandled message $message")
@@ -184,7 +185,7 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
       onChannel(channel, forwarder)
       requestLog.map(r => self forward r)
       log.info(s"got channel $channel")
-      statusListener.map(a => a ! Connected)
+      statusListeners.map(a => a ! Connected)
       context.become(connected(channel, forwarder))
     }
     case Record(request: Request) => {
@@ -210,14 +211,15 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
       log.error(cause, "shutdown")
       context.stop(forwarder)
       context.parent ! ConnectionOwner.CreateChannel
-      statusListener.map(a => a ! Disconnected)
+      statusListeners.map(a => a ! Disconnected)
       context.become(disconnected)
     }
   }
 
   private def addStatusListener(listener: ActorRef) {
-    statusListener.map(context.unwatch)
-    context.watch(listener)
-    statusListener = Some(listener)
+    if (!statusListeners.contains(listener)) {
+      context.watch(listener)
+      statusListeners.add(listener)
+    }
   }
 }

@@ -4,6 +4,7 @@ import Amqp._
 import akka.actor.{UnboundedStash, UnrestrictedStash, Props, ActorRef}
 import com.rabbitmq.client.{Envelope, Channel, DefaultConsumer}
 import com.rabbitmq.client.AMQP.BasicProperties
+import akka.event.LoggingReceive
 
 object Consumer {
   def props(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None): Props =
@@ -37,7 +38,7 @@ class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[R
     consumerTags.clear()
   }
 
-  override def connected(channel: Channel, forwarder: ActorRef) : Receive = ({
+  override def connected(channel: Channel, forwarder: ActorRef) : Receive = LoggingReceive({
     /**
      * add a queue to our consumer
      */

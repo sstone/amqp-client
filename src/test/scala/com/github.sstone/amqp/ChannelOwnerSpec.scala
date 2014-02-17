@@ -63,6 +63,15 @@ class ChannelOwnerSpec extends ChannelSpec  {
   }
 
 
+  "register status listeners" in {
+    val probe1 = TestProbe()
+    val probe2 = TestProbe()
+    channelOwner ! AddStatusListener(probe1.ref)
+    channelOwner ! AddStatusListener(probe2.ref)
+    probe1.expectMsg(ChannelOwner.Connected)
+    probe2.expectMsg(ChannelOwner.Connected)
+  }
+
   "remove a status listener when it terminates" in {
     val latch = new CountDownLatch(1)
 
