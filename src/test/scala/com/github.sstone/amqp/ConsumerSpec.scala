@@ -116,5 +116,45 @@ class ConsumerSpec extends ChannelSpec {
       producer ! Publish(exchange.name, "test_key", "test message".getBytes("UTF-8"))
       probe.expectMsgClass(1 second, classOf[Delivery])
     }
+
+    "not receive message if their queue is cancelled" in {
+
+      val queue = randomQueue.copy(autodelete = false)
+      val probe = TestProbe()
+      ignoreMsg {
+        case Amqp.Ok(p:Publish, _) => true
+      }
+      val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(listener = Some(probe.ref)), timeout = 5000 millis)
+      val producer = ConnectionOwner.createChildActor(conn, ChannelOwner.props())
+
+      consumer ! AddStatusListener(probe.ref)
+      producer ! AddStatusListener(probe.ref)
+      probe.expectMsg(1 second, ChannelOwner.Connected)
+      probe.expectMsg(1 second, ChannelOwner.Connected)
+      producer ! DeclareQueue(queue)
+      val Amqp.Ok(DeclareQueue(_), _) = receiveOne(1 second)
+      consumer ! Record(AddQueue(queue))
+      val Amqp.Ok(AddQueue(_), _) = receiveOne(1 second)
+
+      val message = "yo!".getBytes
+      producer ! Publish("", queue.name, message)
+      probe.expectMsgClass(1.second, classOf[Delivery])
+
+      // cancel the queue
+      consumer ! CancelQueue(queue.name)
+      val Amqp.Ok(CancelQueue(_), _) = receiveOne(1 second)
+
+      // The published message is not expected before re-adding the queue
+      producer ! Publish("", queue.name, message)
+
+      probe.expectNoMsg(1.second)
+
+      consumer ! Record(AddQueue(queue))
+      val Amqp.Ok(AddQueue(_), _) = receiveOne(1 second)
+      probe.expectMsgClass(1.second, classOf[Delivery])
+
+      producer ! DeleteQueue(queue.name)
+    }
+
   }
 }
