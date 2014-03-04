@@ -68,5 +68,30 @@ class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[R
         consumerTag
       })
     }
+    case request@CancelQueue(_) => {
+      log.debug("processing %s".format(request))
+
+      sender ! withChannel(channel, request)(c => {
+        // keep only consumerTags of the queue
+        val consumerTagForQueue = consumerTags.filter {
+          case (key, value) => value == request.queueName
+        }
+        consumerTagForQueue.foreach {
+          case (consumer, queue)  =>
+            log.debug("cancelling consumer {} on queue {}", consumer, queue)
+            channel.basicCancel(consumer)
+        }
+        consumerTags --= consumerTagForQueue.keySet
+        // remove the Record
+        requestLog = requestLog.filterNot {
+          _ match {
+            case AddQueue(queueName) => true
+            case _ => false
+          }
+        } .toVector
+
+      })
+    }
+
   } : Receive) orElse super.connected(channel, forwarder)
 }

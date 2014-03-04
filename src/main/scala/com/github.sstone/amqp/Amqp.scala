@@ -116,6 +116,16 @@ object Amqp {
 
   case class AddQueue(queue: QueueParameters) extends Request
 
+  /**
+   * This will do a basic cancel for all consumerTag matching the queueName
+   *
+   * Warn: The Cancel will also remove the record !
+   * To cancel the cancel, just AddQueue(queueName)
+   * @param queueName
+   */
+  case class CancelQueue(queueName: String) extends  Request
+
+
   case class AddBinding(binding: Binding) extends Request
 
   case class Record(request: Request) extends Request
