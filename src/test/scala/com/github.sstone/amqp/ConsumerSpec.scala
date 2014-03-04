@@ -138,12 +138,16 @@ class ConsumerSpec extends ChannelSpec {
 
       val message = "yo!".getBytes
       producer ! Publish("", queue.name, message)
-      probe.expectMsgClass(1.second, classOf[Delivery])
+      val Delivery(_, env, _, _) = probe.receiveOne(1.second)
 
       // cancel the queue
       consumer ! CancelQueue(queue.name)
-      val Amqp.Ok(CancelQueue(_), _) = receiveOne(1 second)
 
+      // Acknowledge the message after cancel
+      probe.reply(Ack(env.getDeliveryTag))
+      probe.expectMsgClass(1.second, classOf[Ok])
+
+      val Amqp.Ok(CancelQueue(_), _) = receiveOne(1 second)
       // The published message is not expected before re-adding the queue
       producer ! Publish("", queue.name, message)
 
