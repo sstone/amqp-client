@@ -19,6 +19,8 @@ object ChannelOwner {
 
   case object Connected extends State
 
+  case class NotConnectedError(request: Request)
+
   def props(init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None): Props = Props(new ChannelOwner(init, channelParams))
 
   private[amqp] class Forwarder(channel: Channel) extends Actor with ActorLogging {
@@ -192,6 +194,10 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
       requestLog :+= request
     }
     case AddStatusListener(actor) => addStatusListener(actor)
+
+    case request: Request => {
+      sender ! NotConnectedError(request)
+    }
   }
 
   def connected(channel: Channel, forwarder: ActorRef): Receive = LoggingReceive {

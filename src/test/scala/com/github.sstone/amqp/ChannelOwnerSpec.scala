@@ -9,6 +9,7 @@ import concurrent.duration._
 import com.rabbitmq.client.AMQP.Queue
 import com.github.sstone.amqp.Amqp._
 import com.rabbitmq.client.GetResponse
+import com.github.sstone.amqp.ChannelOwner.NotConnectedError
 
 @RunWith(classOf[JUnitRunner])
 class ChannelOwnerSpec extends ChannelSpec  {
@@ -62,7 +63,6 @@ class ChannelOwnerSpec extends ChannelSpec  {
     expectMsgClass(1 seconds, classOf[ReturnedMessage])
   }
 
-
   "register status listeners" in {
     val probe1 = TestProbe()
     val probe2 = TestProbe()
@@ -93,8 +93,33 @@ class ChannelOwnerSpec extends ChannelSpec  {
     system.stop(statusListenerProbe)
 
     channelOwner ! DeclareQueue(QueueParameters("NO_SUCH_QUEUE", passive = true))
-
+    expectMsgClass(classOf[Amqp.Error])
     deadletterProbe.expectNoMsg(1 second)
+  }
+
+  "return requests when not connected" in {
+    val probe = TestProbe()
+    channelOwner ! AddStatusListener(probe.ref)
+    probe.expectMsg(ChannelOwner.Connected)
+
+    // Force channel to close by inducing an error
+    channelOwner ! DeclareQueue(QueueParameters("NO_SUCH_QUEUE", passive = true))
+
+    expectMsgPF() {
+      case Error(DeclareQueue(QueueParameters(_,_, _, _, _, _)),_) => true
+    }
+
+    probe.expectMsg(ChannelOwner.Disconnected)
+
+    val testRequest = DeclareQueue(QueueParameters("my_test_queue", passive = false))
+    channelOwner ! testRequest
+
+    // we also test for Ok() here because it is possible, though very unlikely, that the
+    // ChannelOwner had already received a new channel before it got our test request
+    expectMsgPF() {
+      case NotConnectedError(testRequest) => true
+      case Ok(testRequest, _) => true
+    }
   }
 
   "Multiple ChannelOwners" should {
