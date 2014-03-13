@@ -118,6 +118,8 @@ object Amqp {
 
   case class AddBinding(binding: Binding) extends Request
 
+  case class CancelConsumer(consumerTag: String) extends Request
+
   case class Record(request: Request) extends Request
 
   case class Get(queue: String, autoAck: Boolean) extends Request

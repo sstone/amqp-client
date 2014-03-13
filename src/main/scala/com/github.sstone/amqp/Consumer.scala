@@ -68,5 +68,11 @@ class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[R
         consumerTag
       })
     }
+
+    case request@CancelConsumer(consumerTag) => {
+      log.debug("processing %s".format(request))
+      sender ! withChannel(channel, request)(c => c.basicCancel(consumerTag))
+    }
+
   } : Receive) orElse super.connected(channel, forwarder)
 }
