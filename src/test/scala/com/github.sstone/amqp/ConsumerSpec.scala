@@ -1,16 +1,10 @@
 package com.github.sstone.amqp
 
+import akka.testkit.TestProbe
+import com.github.sstone.amqp.Amqp._
+import concurrent.duration._
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
-import akka.testkit.TestProbe
-import akka.actor.Props
-import concurrent.duration._
-import com.github.sstone.amqp.Amqp._
-import com.github.sstone.amqp.Amqp.Publish
-import com.github.sstone.amqp.Amqp.ExchangeParameters
-import com.github.sstone.amqp.Amqp.Binding
-import com.github.sstone.amqp.Amqp.QueueParameters
-import com.rabbitmq.client.AMQP.Queue
 
 @RunWith(classOf[JUnitRunner])
 class ConsumerSpec extends ChannelSpec {

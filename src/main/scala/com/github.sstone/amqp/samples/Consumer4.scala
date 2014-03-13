@@ -1,23 +1,13 @@
 package com.github.sstone.amqp.samples
 
 import akka.actor._
-import com.rabbitmq.client.ConnectionFactory
-import com.github.sstone.amqp.{Amqp, ChannelOwner, Consumer, ConnectionOwner}
-import com.github.sstone.amqp.ConnectionOwner.Create
 import com.github.sstone.amqp.Amqp._
 import com.github.sstone.amqp.ConnectionOwner.Create
+import com.github.sstone.amqp.{Amqp, ChannelOwner, Consumer, ConnectionOwner}
+import com.rabbitmq.client.ConnectionFactory
 import java.util.concurrent.TimeUnit
-import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
-import com.github.sstone.amqp.Amqp.Ack
-import com.github.sstone.amqp.Amqp.CancelConsumer
-import com.github.sstone.amqp.Amqp.Publish
-import com.github.sstone.amqp.Amqp.DeclareQueue
-import com.github.sstone.amqp.ConnectionOwner.Create
-import scala.Some
-import com.github.sstone.amqp.Amqp.AddQueue
-import com.github.sstone.amqp.Amqp.QueueParameters
-import com.github.sstone.amqp.Amqp.Delivery
+import scala.concurrent.duration._
 
 /**
  * AMQP consumer that switches between multiple queues
