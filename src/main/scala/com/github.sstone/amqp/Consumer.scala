@@ -30,12 +30,11 @@ class Consumer(bindings: List[Binding], listener: Option[ActorRef], channelParam
     val channel = consumer.getChannel
     val queueName = declareQueue(channel, binding.queue).getQueue
     log.info("binding to queue {}", queueName)
-    if (binding.consumeOnly) channel.basicConsume(queueName, autoack, consumer)
-    else {
+    if (!binding.consumeOnly) {
       declareExchange(channel, binding.exchange)
       channel.queueBind(queueName, binding.exchange.name, binding.routingKey)
-      channel.basicConsume(queueName, autoack, consumer)
     }
+    channel.basicConsume(queueName, autoack, consumer)
   }
 
   override def onChannel(channel: Channel) {
