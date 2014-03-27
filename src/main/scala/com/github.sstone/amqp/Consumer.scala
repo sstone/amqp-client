@@ -29,9 +29,13 @@ class Consumer(bindings: List[Binding], listener: Option[ActorRef], channelParam
   private def setupBinding(consumer: DefaultConsumer, binding: Binding) = {
     val channel = consumer.getChannel
     val queueName = declareQueue(channel, binding.queue).getQueue
-    declareExchange(channel, binding.exchange)
-    channel.queueBind(queueName, binding.exchange.name, binding.routingKey)
-    channel.basicConsume(queueName, autoack, consumer)
+    log.info("binding to queue {}", queueName)
+    if (binding.consumeOnly) channel.basicConsume(queueName, autoack, consumer)
+    else {
+      declareExchange(channel, binding.exchange)
+      channel.queueBind(queueName, binding.exchange.name, binding.routingKey)
+      channel.basicConsume(queueName, autoack, consumer)
+    }
   }
 
   override def onChannel(channel: Channel) {
