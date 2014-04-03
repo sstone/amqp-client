@@ -183,6 +183,12 @@ object Amqp {
    */
   case class HandleFlow(active: Boolean)
 
+  /**
+   * sent when a consumer is cancelled
+   * @param consumerTag consumer tag
+   */
+  case class ConsumerCancelled(consumerTag: String)
+
   /** executes a callback when a connection or channel actors is "connected" i.e. usable
     * <ul>
     * <li>for a connection actor, connected means that it is connected to the AMQP broker</li>

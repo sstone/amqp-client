@@ -23,19 +23,21 @@ object Consumer {
  */
 class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None) extends ChannelOwner(init, channelParams) with UnboundedStash {
   import ChannelOwner._
-  // consumer tag -> queue map
-  val consumerTags = scala.collection.mutable.HashMap.empty[String, String]
   var consumer: Option[DefaultConsumer] = None
 
-  override def onChannel(channel: Channel, forwarder: ActorRef) {
+  override def onChannel(channel: Channel, forwarder: ActorRef): Unit = {
     super.onChannel(channel, forwarder)
     val destination = listener getOrElse self
     consumer = Some(new DefaultConsumer(channel) {
       override def handleDelivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]) {
         destination.tell(Delivery(consumerTag, envelope, properties, body), sender = forwarder)
       }
+
+      override def handleCancel(consumerTag: String): Unit = {
+        super.handleCancel(consumerTag)
+        destination ! ConsumerCancelled(consumerTag)
+      }
     })
-    consumerTags.clear()
   }
 
   override def connected(channel: Channel, forwarder: ActorRef) : Receive = LoggingReceive({
@@ -47,7 +49,6 @@ class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[R
       sender !  withChannel(channel, request)(c => {
         val queueName = declareQueue(c, queue).getQueue
         val consumerTag = c.basicConsume(queueName, autoack, consumer.get)
-        consumerTags.put(consumerTag, queueName)
         log.debug(s"using consumer $consumerTag")
         consumerTag
       })
@@ -59,12 +60,11 @@ class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[R
     case request@AddBinding(binding) => {
       log.debug("processing %s".format(request))
       sender ! withChannel(channel, request)(c => {
-        val queueName = declareQueue(c, binding.queue).getQueue
         declareExchange(c, binding.exchange)
+        val queueName = declareQueue(c, binding.queue).getQueue
         c.queueBind(queueName, binding.exchange.name, binding.routingKey)
         val consumerTag = c.basicConsume(queueName, autoack, consumer.get)
         log.debug(s"using consumer $consumerTag")
-        consumerTags.put(consumerTag, queueName)
         consumerTag
       })
     }
