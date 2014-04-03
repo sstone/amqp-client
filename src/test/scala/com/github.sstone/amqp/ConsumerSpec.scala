@@ -143,5 +143,25 @@ class ConsumerSpec extends ChannelSpec {
       producer ! Publish("", queue1.name, "test1".getBytes("UTF-8"))
       probe.expectNoMsg()
     }
+    "send consumer cancellation notifications" in {
+      val probe = TestProbe()
+      val queue = randomQueue
+      val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(listener = Some(probe.ref), autoack = false), timeout = 5000 millis)
+      val producer = ConnectionOwner.createChildActor(conn, ChannelOwner.props())
+      consumer ! AddStatusListener(probe.ref)
+      producer ! AddStatusListener(probe.ref)
+      probe.expectMsg(1 second, ChannelOwner.Connected)
+      probe.expectMsg(1 second, ChannelOwner.Connected)
+
+      consumer ! AddQueue(queue)
+      val Amqp.Ok(AddQueue(_), Some(consumerTag: String)) = receiveOne(1 second)
+
+      producer ! Publish("", queue.name, "test".getBytes("UTF-8"))
+      val delivery: Delivery = probe.expectMsgClass(classOf[Delivery])
+      assert(delivery.consumerTag === consumerTag)
+
+      producer ! DeleteQueue(queue.name)
+      probe.expectMsg(1 second, ConsumerCancelled(consumerTag))
+    }
   }
 }
