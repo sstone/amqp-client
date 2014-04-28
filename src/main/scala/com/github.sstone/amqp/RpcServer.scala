@@ -7,6 +7,7 @@ import concurrent.{ExecutionContext, Future}
 import util.{Failure, Success}
 import akka.actor.{ActorRef, Props}
 import akka.event.LoggingReceive
+import scala.concurrent.ExecutionContext
 
 object RpcServer {
 
@@ -38,12 +39,13 @@ object RpcServer {
     def onFailure(delivery: Delivery, e: Throwable): ProcessResult
   }
 
-  def props(processor: RpcServer.IProcessor, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None): Props = Props(new RpcServer(processor, init, channelParams))
+  def props(processor: RpcServer.IProcessor, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None)(implicit ctx: ExecutionContext): Props =
+    Props(new RpcServer(processor, init, channelParams))
 
-  def props(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, proc: RpcServer.IProcessor, channelParams: ChannelParameters): Props =
+  def props(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, proc: RpcServer.IProcessor, channelParams: ChannelParameters)(implicit ctx: ExecutionContext): Props =
     props(processor = proc, init = List(AddBinding(Binding(exchange, queue, routingKey))), channelParams = Some(channelParams))
 
-  def props(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, proc: RpcServer.IProcessor): Props =
+  def props(queue: QueueParameters, exchange: ExchangeParameters, routingKey: String, proc: RpcServer.IProcessor)(implicit ctx: ExecutionContext): Props =
     props(processor = proc, init = List(AddBinding(Binding(exchange, queue, routingKey))))
 
 }
@@ -58,10 +60,7 @@ object RpcServer {
  * @param processor [[com.github.sstone.amqp.RpcServer.IProcessor]] implementation
  * @param channelParams optional channel parameters
  */
-class RpcServer(processor: RpcServer.IProcessor, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None) extends Consumer(listener = None, autoack = false, init = init, channelParams = channelParams) {
-
-  import ExecutionContext.Implicits.global
-
+class RpcServer(processor: RpcServer.IProcessor, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None)(implicit ctx: ExecutionContext = ExecutionContext.Implicits.global) extends Consumer(listener = None, autoack = false, init = init, channelParams = channelParams) {
   import RpcServer._
 
   private def sendResponse(result: ProcessResult, properties: BasicProperties, channel: Channel) {

@@ -6,7 +6,7 @@ import akka.event.LoggingReceive
 import akka.pattern.ask
 import akka.util.Timeout
 import com.rabbitmq.client.{Connection, ShutdownSignalException, ShutdownListener, ConnectionFactory, Address => RMQAddress}
-import concurrent.Await
+import scala.concurrent.{ExecutionContext, Await}
 import concurrent.duration._
 import java.util.concurrent.ExecutorService
 import scala.util.{Failure, Success, Try}
@@ -100,11 +100,11 @@ class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: St
     createChild(Consumer.props(listener, exchange, queue, routingKey, channelParams, autoack))
   }
 
-  def createRpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters]) = {
+  def createRpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters])(implicit ctx: ExecutionContext) = {
     createChild(Props(new RpcServer(processor, bindings.map(b => AddBinding(b)), channelParams)), None)
   }
 
-  def createRpcServer(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters]) = {
+  def createRpcServer(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters])(implicit ctx: ExecutionContext) = {
     createChild(Props(new RpcServer(processor, List(AddBinding(Binding(exchange, queue, routingKey))), channelParams)), None)
   }
 
