@@ -4,12 +4,14 @@ import org.scalatest.junit.JUnitRunner
 import org.junit.runner.RunWith
 import akka.testkit.TestProbe
 import akka.actor.{Props, Actor, DeadLetter}
+import akka.pattern.gracefulStop
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import concurrent.duration._
 import com.rabbitmq.client.AMQP.Queue
 import com.github.sstone.amqp.Amqp._
 import com.rabbitmq.client.GetResponse
 import com.github.sstone.amqp.ChannelOwner.NotConnectedError
+import scala.concurrent.Await
 
 @RunWith(classOf[JUnitRunner])
 class ChannelOwnerSpec extends ChannelSpec  {
@@ -28,6 +30,7 @@ class ChannelOwnerSpec extends ChannelSpec  {
       channelOwner ! QueueBind(queue, "amq.direct", "my_test_key")
       channelOwner ! Publish("amq.direct", "my_test_key", "yo!".getBytes)
       receiveN(3, 2 seconds)
+      Thread.sleep(100)
 
       // check that there is 1 message in the queue
       channelOwner ! DeclareQueue(QueueParameters(queue, passive = true))
@@ -90,7 +93,7 @@ class ChannelOwnerSpec extends ChannelSpec  {
     val deadletterProbe = TestProbe()
     system.eventStream.subscribe(deadletterProbe.ref, classOf[DeadLetter])
 
-    system.stop(statusListenerProbe)
+    Await.result(gracefulStop(statusListenerProbe, 5 seconds), 6 seconds)
 
     channelOwner ! DeclareQueue(QueueParameters("NO_SUCH_QUEUE", passive = true))
     expectMsgClass(classOf[Amqp.Error])

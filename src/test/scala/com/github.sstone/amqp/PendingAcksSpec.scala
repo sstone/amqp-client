@@ -5,13 +5,13 @@ import akka.actor.{PoisonPill, ActorLogging}
 import akka.testkit.TestProbe
 import com.github.sstone.amqp.Amqp._
 import org.junit.runner.RunWith
-import org.scalatest.WordSpec
+import org.scalatest.WordSpecLike
 import org.scalatest.junit.JUnitRunner
 import scala.concurrent.duration._
 import java.util.concurrent.TimeUnit
 
 @RunWith(classOf[JUnitRunner])
-class PendingAcksSpec extends ChannelSpec with WordSpec {
+class PendingAcksSpec extends ChannelSpec with WordSpecLike {
   "consumers" should {
     "receive messages that were delivered to another consumer that crashed before it acked them" in {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)

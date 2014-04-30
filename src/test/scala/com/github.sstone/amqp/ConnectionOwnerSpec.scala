@@ -1,7 +1,7 @@
 package com.github.sstone.amqp
 
 import org.scalatest.matchers.ShouldMatchers
-import org.scalatest.WordSpec
+import org.scalatest.WordSpecLike
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
@@ -15,7 +15,7 @@ import ConnectionOwner.CreateChannel
 import java.util.concurrent.TimeUnit
 
 @RunWith(classOf[JUnitRunner])
-class ConnectionOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSpec with ShouldMatchers with ImplicitSender {
+class ConnectionOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSpecLike with ShouldMatchers with ImplicitSender {
   implicit val timeout = Timeout(5 seconds)
 
   "ConnectionOwner" should {
