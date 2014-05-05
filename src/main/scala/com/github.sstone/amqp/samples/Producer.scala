@@ -1,7 +1,7 @@
 package com.github.sstone.amqp.samples
 
 import akka.actor.ActorSystem
-import com.github.sstone.amqp.{ChannelOwner, ConnectionOwner, Amqp, RabbitMQConnection}
+import com.github.sstone.amqp.{ChannelOwner, ConnectionOwner, Amqp}
 import com.github.sstone.amqp.Amqp._
 import com.rabbitmq.client.ConnectionFactory
 import com.github.sstone.amqp.Amqp.Publish

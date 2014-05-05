@@ -5,7 +5,7 @@ import scala.concurrent.duration._
 import akka.actor.{Actor, ActorSystem}
 import akka.pattern.ask
 import akka.util.Timeout
-import com.github.sstone.amqp.{ConnectionOwner, RpcClient, RabbitMQConnection}
+import com.github.sstone.amqp.{ConnectionOwner, RpcClient}
 import com.github.sstone.amqp.RpcClient.Request
 import com.github.sstone.amqp.Amqp.Publish
 import com.rabbitmq.client.ConnectionFactory

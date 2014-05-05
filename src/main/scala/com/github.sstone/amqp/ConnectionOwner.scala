@@ -59,62 +59,6 @@ object ConnectionOwner {
 }
 
 /**
- * @deprecated("use ConnectionOwner directly instead")
- * Helper class that encapsulates a connection owner so that it is easier to manipulate
- * @param host
- * @param port
- * @param vhost
- * @param user
- * @param password
- * @param name
- * @param reconnectionDelay
- * @param executor alternative ThreadPool for consumer threads (http://www.rabbitmq.com/api-guide.html#consumer-thread-pool)
- * @param addresses List of alternative addresses for a HA RabbitMQ cluster (http://www.rabbitmq.com/api-guide.html#address-array)
- * @param actorRefFactory
- */
-class RabbitMQConnection(host: String = "localhost", port: Int = 5672, vhost: String = "/", user: String = "guest", password: String =
-"guest", name: String, reconnectionDelay: FiniteDuration = 10000 millis, executor: Option[ExecutorService] = None,
-                         addresses: Option[Array[RMQAddress]] = None)(implicit actorRefFactory: ActorRefFactory) {
-
-  import ConnectionOwner._
-
-  lazy val owner = actorRefFactory.actorOf(Props(new ConnectionOwner(buildConnFactory(host = host, port = port, vhost = vhost, user = user, password = password),
-    reconnectionDelay, executor, addresses)), name = name)
-
-  def waitForConnection = Amqp.waitForConnection(actorRefFactory, owner)
-
-  def stop = actorRefFactory.stop(owner)
-
-  def createChild(props: Props, name: Option[String] = None, timeout: Timeout = 5000.millis): ActorRef = {
-    val future = owner.ask(Create(props, name))(timeout).mapTo[ActorRef]
-    Await.result(future, timeout.duration)
-  }
-
-  def createChannelOwner(channelParams: Option[ChannelParameters] = None) = createChild(Props(new ChannelOwner(channelParams = channelParams)))
-
-  def createConsumer(bindings: List[Binding], listener: ActorRef, channelParams: Option[ChannelParameters], autoack: Boolean) = {
-    createChild(Consumer.props(Some(listener), autoack, bindings.map(b => AddBinding(b)), channelParams))
-  }
-
-  def createConsumer(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, listener: ActorRef, channelParams: Option[ChannelParameters] = None, autoack: Boolean = false) = {
-    createChild(Consumer.props(listener, exchange, queue, routingKey, channelParams, autoack))
-  }
-
-  def createRpcServer(bindings: List[Binding], processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters])(implicit ctx: ExecutionContext) = {
-    createChild(Props(new RpcServer(processor, bindings.map(b => AddBinding(b)), channelParams)), None)
-  }
-
-  def createRpcServer(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, processor: RpcServer.IProcessor, channelParams: Option[ChannelParameters])(implicit ctx: ExecutionContext) = {
-    createChild(Props(new RpcServer(processor, List(AddBinding(Binding(exchange, queue, routingKey))), channelParams)), None)
-  }
-
-  def createRpcClient() = {
-    createChild(Props(new RpcClient()))
-  }
-
-}
-
-/**
  * ConnectionOwner class, which holds an AMQP connection and handles re-connection
  * It is implemented as a state machine which 2 possible states
  * <ul>

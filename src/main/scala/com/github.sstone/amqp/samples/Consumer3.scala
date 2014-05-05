@@ -1,7 +1,7 @@
 package com.github.sstone.amqp.samples
 
 import akka.actor.{Actor, Props, ActorSystem}
-import com.github.sstone.amqp.{ConnectionOwner, Amqp, Consumer, RabbitMQConnection}
+import com.github.sstone.amqp.{ConnectionOwner, Amqp, Consumer}
 import com.github.sstone.amqp.Amqp._
 import com.rabbitmq.client.ConnectionFactory
 import scala.concurrent.duration._
