@@ -6,7 +6,7 @@
         <version>7</version>
     </parent>
     <groupId>com.github.sstone</groupId>
-    <artifactId>amqp-client_2.11</artifactId>
+    <artifactId>amqp-client_2.10</artifactId>
     <version>1.4-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>amqp-client</name>
@@ -15,7 +15,7 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <scala.version>2.11</scala.version>
+        <scala.version>2.10.4</scala.version>
         <akka.version>2.3.2</akka.version>
     </properties>
 
@@ -152,13 +152,13 @@
         </dependency>
         <dependency>
             <groupId>com.typesafe.akka</groupId>
-            <artifactId>akka-actor_2.11</artifactId>
+            <artifactId>akka-actor_2.10</artifactId>
             <version>${akka.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>com.typesafe.akka</groupId>
-            <artifactId>akka-slf4j_2.11</artifactId>
+            <artifactId>akka-slf4j_2.10</artifactId>
             <version>${akka.version}</version>
             <scope>test</scope>
         </dependency>
@@ -170,13 +170,13 @@
         </dependency>
         <dependency>
             <groupId>com.typesafe.akka</groupId>
-            <artifactId>akka-testkit_2.11</artifactId>
+            <artifactId>akka-testkit_2.10</artifactId>
             <version>${akka.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.scalatest</groupId>
-            <artifactId>scalatest_2.11</artifactId>
+            <artifactId>scalatest_2.10</artifactId>
             <version>2.1.5</version>
             <scope>test</scope>
         </dependency>
