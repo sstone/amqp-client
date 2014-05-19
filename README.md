@@ -337,8 +337,7 @@ publish to queue 'B', 'B' processors publish to queue 'C' ....
 
 ## Samples
 
-Please check ChannelOwnerSpec.scala in [src/test/scala/com/github.sstone/amqp/ChannelOwnerSpec.scala](http://github.com/sstone/amqp-client/blob/master/src/test/scala/com/aphelia/amqp/ChannelOwnerSpec.scala) for
-more comprehensive samples
+You can check either samples [src/main/scala/com/github.sstone/amqp/samples](https://github.com/sstone/amqp-client/tree/scala2.10/src/main/scala/com/github.sstone/amqp/samples) or spec tests [src/test/scala/com/github.sstone/amqp](https://github.com/sstone/amqp-client/tree/scala2.10/src/test/scala/com/github.sstone/amqp) for examples how to use the library.
 
 
 
