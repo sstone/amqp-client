@@ -340,7 +340,7 @@ publish to queue 'B', 'B' processors publish to queue 'C' ....
 
 ## Samples
 
-You can check either samples [src/main/scala/com/github.sstone/amqp/samples](https://github.com/sstone/amqp-client/tree/scala2.10/src/main/scala/com/github.sstone/amqp/samples) or spec tests [src/test/scala/com/github.sstone/amqp](https://github.com/sstone/amqp-client/tree/scala2.10/src/test/scala/com/github.sstone/amqp) for examples of how to use the library.
+You can check either samples [src/main/scala/com/github.sstone/amqp/samples](https://github.com/sstone/amqp-client/tree/scala2.11/src/main/scala/com/github.sstone/amqp/samples) or spec tests [src/test/scala/com/github.sstone/amqp](https://github.com/sstone/amqp-client/tree/scala2.11/src/test/scala/com/github.sstone/amqp) for examples of how to use the library.
 
 
 
