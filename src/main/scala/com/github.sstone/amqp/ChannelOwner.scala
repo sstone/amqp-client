@@ -179,7 +179,7 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
 
   def receive = disconnected
 
-  def disconnected: Receive = LoggingReceive {
+  def disconnected(queue: Seq[Request]): Receive = LoggingReceive {
     case channel: Channel => {
       val forwarder = context.actorOf(Props(new Forwarder(channel)), name = "forwarder")
       forwarder ! AddShutdownListener(self)
@@ -189,6 +189,7 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
       log.info(s"got channel $channel")
       statusListeners.map(a => a ! Connected)
       context.become(connected(channel, forwarder))
+      queue.foreach(r => self forward r)
     }
     case Record(request: Request) => {
       requestLog :+= request
@@ -196,9 +197,11 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
     case AddStatusListener(actor) => addStatusListener(actor)
 
     case request: Request => {
-      sender ! NotConnectedError(request)
+      context.become(disconnected(queue :+ request))
     }
   }
+
+  def disconnected: Receive = disconnected(Seq.empty)
 
   def connected(channel: Channel, forwarder: ActorRef): Receive = LoggingReceive {
     case Amqp.Ok(_, _) => ()
