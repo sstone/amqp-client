@@ -16,7 +16,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <scala.version>2.10.4</scala.version>
-        <akka.version>2.3.2</akka.version>
+        <akka.version>2.3.6</akka.version>
     </properties>
 
     <licenses>
@@ -148,7 +148,7 @@
         <dependency>
             <groupId>com.rabbitmq</groupId>
             <artifactId>amqp-client</artifactId>
-            <version>3.3.1</version>
+            <version>3.3.5</version>
         </dependency>
         <dependency>
             <groupId>com.typesafe.akka</groupId>
@@ -177,7 +177,7 @@
         <dependency>
             <groupId>org.scalatest</groupId>
             <artifactId>scalatest_2.10</artifactId>
-            <version>2.1.5</version>
+            <version>2.2.2</version>
             <scope>test</scope>
         </dependency>
         <dependency>
