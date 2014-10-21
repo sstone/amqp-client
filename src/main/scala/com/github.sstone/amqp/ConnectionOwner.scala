@@ -169,6 +169,7 @@ class ConnectionOwner(connFactory: ConnectionFactory,
       case Success(channel) => sender ! channel
       case Failure(cause) => {
         log.error(cause, "cannot create channel")
+        statusListeners.map(a => a ! Disconnected)
         context.become(disconnected)
       }
     }
@@ -182,6 +183,7 @@ class ConnectionOwner(connFactory: ConnectionFactory,
     case Shutdown(cause) => {
       log.error(cause, "connection lost")
       connection = None
+      statusListeners.map(a => a ! Disconnected)
       context.children.foreach(_ ! Shutdown(cause))
       self ! 'connect
       context.become(disconnected)
