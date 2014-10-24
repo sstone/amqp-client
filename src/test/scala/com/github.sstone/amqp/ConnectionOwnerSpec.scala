@@ -11,7 +11,8 @@ import akka.util.Timeout
 import concurrent.duration._
 import concurrent.Await
 import com.rabbitmq.client.{ConnectionFactory, Address, Channel}
-import ConnectionOwner.CreateChannel
+import Amqp._
+import ConnectionOwner.{Connected, CreateChannel, Disconnected}
 import java.util.concurrent.TimeUnit
 
 @RunWith(classOf[JUnitRunner])
@@ -51,6 +52,17 @@ class ConnectionOwnerSpec extends TestKit(ActorSystem("TestSystem")) with WordSp
         p.expectMsgClass(2.second, classOf[Channel])
       }
       Await.result(gracefulStop(conn, 5 seconds), 6 seconds)
+    }
+    "send Connected/Disconnected status messages" in {
+      val connFactory = new ConnectionFactory()
+      val uri = system.settings.config.getString("amqp-client-test.rabbitmq.uri")
+      connFactory.setUri(uri)
+      val probe = TestProbe()
+      val conn = system.actorOf(ConnectionOwner.props(connFactory))
+      conn ! AddStatusListener(probe.ref)
+      probe.expectMsg(2 seconds, Connected)
+      conn ! Abort()
+      probe.expectMsg(2 seconds, Disconnected)
     }
   }
 }

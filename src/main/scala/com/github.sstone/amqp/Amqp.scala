@@ -2,7 +2,7 @@ package com.github.sstone.amqp
 
 import collection.JavaConversions._
 import com.rabbitmq.client.AMQP.BasicProperties
-import com.rabbitmq.client.{ShutdownSignalException, Channel, Envelope}
+import com.rabbitmq.client.{AMQP, ShutdownSignalException, Channel, Envelope}
 import akka.actor.{Actor, Props, ActorRef, ActorRefFactory}
 import akka.actor.FSM.{SubscribeTransitionCallBack, CurrentState, Transition}
 import java.util.concurrent.CountDownLatch
@@ -82,6 +82,8 @@ object Amqp {
 
   sealed trait Request
 
+  case class Abort(code: Int = AMQP.REPLY_SUCCESS, message: String = "OK") extends Request
+  
   case class AddStatusListener(listener: ActorRef) extends Request
 
   case class AddReturnListener(listener: ActorRef) extends Request
@@ -89,6 +91,8 @@ object Amqp {
   case class AddShutdownListener(listener: ActorRef) extends Request
 
   case class AddFlowListener(listener: ActorRef) extends Request
+
+  case class Close(code: Int = AMQP.REPLY_SUCCESS, message: String = "OK", timeout: Int = -1) extends Request
 
   case class DeclareQueue(queue: QueueParameters) extends Request
 
