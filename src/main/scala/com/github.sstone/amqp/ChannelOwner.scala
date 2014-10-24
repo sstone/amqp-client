@@ -181,7 +181,7 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
 
   def disconnected: Receive = LoggingReceive {
     case channel: Channel => {
-      val forwarder = context.actorOf(Props(new Forwarder(channel)))
+      val forwarder = context.actorOf(Props(new Forwarder(channel)), name = "forwarder")
       forwarder ! AddShutdownListener(self)
       forwarder ! AddReturnListener(self)
       onChannel(channel, forwarder)

@@ -119,7 +119,8 @@ class ConnectionOwner(connFactory: ConnectionFactory,
     conn.addShutdownListener(new ShutdownListener {
       def shutdownCompleted(cause: ShutdownSignalException) {
         self ! Shutdown(cause)
-      }
+        statusListeners.map(a => a ! Disconnected)
+       }
     })
     conn
   }
@@ -165,6 +166,14 @@ class ConnectionOwner(connFactory: ConnectionFactory,
   def connected(conn: Connection): Receive = LoggingReceive {
     case 'connect => ()
     case Amqp.Ok(_, _) => ()
+    case Abort(code, message) => {
+      conn.abort(code, message)
+      context.stop(self)
+    }    
+    case Close(code, message, timeout) => {
+      conn.close(code, message, timeout)
+      context.stop(self)
+    }    
     case CreateChannel => Try(conn.createChannel()) match {
       case Success(channel) => sender ! channel
       case Failure(cause) => {
