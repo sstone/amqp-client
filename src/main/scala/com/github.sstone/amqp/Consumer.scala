@@ -6,9 +6,12 @@ import com.rabbitmq.client.{Envelope, Channel, DefaultConsumer}
 import com.rabbitmq.client.AMQP.BasicProperties
 import akka.event.LoggingReceive
 
+import scala.collection.JavaConversions._
+
 object Consumer {
-  def props(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None): Props =
-    Props(new Consumer(listener, autoack, init, channelParams))
+  def props(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None,
+            consumerTag: String = "", noLocal: Boolean = false, exclusive: Boolean = false, arguments: Map[String, AnyRef] = Map.empty): Props =
+    Props(new Consumer(listener, autoack, init, channelParams, consumerTag, noLocal, exclusive, arguments))
 
   def props(listener: ActorRef, exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, channelParams: Option[ChannelParameters], autoack: Boolean): Props =
     props(Some(listener), init = List(AddBinding(Binding(exchange, queue, routingKey))), channelParams = channelParams, autoack = autoack)
@@ -21,8 +24,17 @@ object Consumer {
  * @param listener optional listener actor; if not set, self will be used instead
  * @param channelParams optional channel parameters
  */
-class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None) extends ChannelOwner(init, channelParams) with UnboundedStash {
+class Consumer(listener: Option[ActorRef],
+               autoack: Boolean = false,
+               init: Seq[Request] = Seq.empty[Request],
+               channelParams: Option[ChannelParameters] = None,
+               consumerTag: String = "",
+               noLocal: Boolean = false,
+               exclusive: Boolean = false,
+               arguments: Map[String, AnyRef] = Map.empty) extends ChannelOwner(init, channelParams) with UnboundedStash {
+
   import ChannelOwner._
+
   var consumer: Option[DefaultConsumer] = None
 
   override def onChannel(channel: Channel, forwarder: ActorRef): Unit = {
@@ -40,17 +52,17 @@ class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[R
     })
   }
 
-  override def connected(channel: Channel, forwarder: ActorRef) : Receive = LoggingReceive({
+  override def connected(channel: Channel, forwarder: ActorRef): Receive = LoggingReceive({
     /**
      * add a queue to our consumer
      */
     case request@AddQueue(queue) => {
       log.debug("processing %s".format(request))
-      sender !  withChannel(channel, request)(c => {
+      sender ! withChannel(channel, request)(c => {
         val queueName = declareQueue(c, queue).getQueue
-        val consumerTag = c.basicConsume(queueName, autoack, consumer.get)
-        log.debug(s"using consumer $consumerTag")
-        consumerTag
+        val actualConsumerTag = c.basicConsume(queueName, autoack, consumerTag, noLocal, exclusive, arguments, consumer.get)
+        log.debug(s"using consumer $actualConsumerTag")
+        actualConsumerTag
       })
     }
 
@@ -63,9 +75,9 @@ class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[R
         declareExchange(c, binding.exchange)
         val queueName = declareQueue(c, binding.queue).getQueue
         c.queueBind(queueName, binding.exchange.name, binding.routingKey)
-        val consumerTag = c.basicConsume(queueName, autoack, consumer.get)
-        log.debug(s"using consumer $consumerTag")
-        consumerTag
+        val actualConsumerTag = c.basicConsume(queueName, autoack, consumerTag, noLocal, exclusive, arguments, consumer.get)
+        log.debug(s"using consumer $actualConsumerTag")
+        actualConsumerTag
       })
     }
 
@@ -74,5 +86,5 @@ class Consumer(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[R
       sender ! withChannel(channel, request)(c => c.basicCancel(consumerTag))
     }
 
-  } : Receive) orElse super.connected(channel, forwarder)
+  }: Receive) orElse super.connected(channel, forwarder)
 }

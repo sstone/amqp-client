@@ -161,7 +161,40 @@ class ConsumerSpec extends ChannelSpec {
       assert(delivery.consumerTag === consumerTag)
 
       producer ! DeleteQueue(queue.name)
+      val Ok(DeleteQueue(_, _, _), result) = receiveOne(1 second)
       probe.expectMsg(1 second, ConsumerCancelled(consumerTag))
+    }
+    "create exclusive consumers" in {
+      val probe = TestProbe()
+      val queue = randomQueue
+      val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(
+        listener = Some(probe.ref), autoack = false, init = Seq.empty[Request], channelParams = None,
+        consumerTag = "", noLocal = false, exclusive = true, arguments = Map.empty), timeout = 5000 millis)
+      val producer = ConnectionOwner.createChildActor(conn, ChannelOwner.props())
+
+      consumer ! AddStatusListener(probe.ref)
+      producer ! AddStatusListener(probe.ref)
+
+      probe.expectMsg(1 second, ChannelOwner.Connected)
+      probe.expectMsg(1 second, ChannelOwner.Connected)
+
+      consumer ! AddQueue(queue)
+      val Amqp.Ok(AddQueue(_), Some(consumerTag: String)) = receiveOne(1 second)
+
+      producer ! Publish("", queue.name, "test".getBytes("UTF-8"))
+      val delivery: Delivery = probe.expectMsgClass(classOf[Delivery])
+      assert(delivery.consumerTag === consumerTag)
+
+      val consumer1 = ConnectionOwner.createChildActor(conn, Consumer.props(
+        listener = Some(probe.ref), autoack = false, init = Seq.empty[Request], channelParams = None,
+        consumerTag = "", noLocal = false, exclusive = true, arguments = Map.empty), timeout = 5000 millis)
+
+      consumer1 ! AddStatusListener(probe.ref)
+      probe.expectMsg(1 second, ChannelOwner.Connected)
+
+      // you cannot have more than 1 exclusive consumer on the same queue
+      consumer1 ! AddQueue(queue)
+      val Amqp.Error(_, reason) = receiveOne(1 second)
     }
   }
 }
