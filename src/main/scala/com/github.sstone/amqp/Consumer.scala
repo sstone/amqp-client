@@ -20,9 +20,15 @@ object Consumer {
 }
 
 /**
- * Create an AMQP consumer, which takes a list of AMQP bindings, a listener to forward messages to, and optional channel parameters.
+ *  Create an AMQP consumer
  * @param listener optional listener actor; if not set, self will be used instead
+ * @param autoack if true, messages  will be automatically acked (default = false)
+ * @param init initial set of requests that will be executed when this consumer receives a valid channel
  * @param channelParams optional channel parameters
+ * @param consumerTag user-specified consumer tag (default is "")
+ * @param noLocal if true the server will not send messages to the connection that published them
+ * @param exclusive if true, this consumer will declare itself as exclusive on all the queues it consumes messages from
+ * @param arguments additional arguments
  */
 class Consumer(listener: Option[ActorRef],
                autoack: Boolean = false,
