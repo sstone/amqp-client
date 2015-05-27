@@ -42,7 +42,7 @@ So it kind of works and will be maintained for some time :-)
   <dependency>
     <groupId>com.github.sstone</groupId>
     <artifactId>amqp-client_SCALA-VERSION</artifactId>
-    <version>1.4</version>
+    <version>1.5</version>
   </dependency>
   <dependency>
     <groupId>com.typesafe.akka</groupId>
@@ -56,7 +56,7 @@ So it kind of works and will be maintained for some time :-)
 Please note that the Akka dependency is now in the "provided" scope which means that you'll have to define it explicitly in your
 maven/sbt projects. 
 
-The latest snapshot (development) version is 1.5-SNAPSHOT, the latest released version is 1.4
+The latest snapshot (development) version is 1.6-SNAPSHOT, the latest released version is 1.5
 
 * amqp-client 1.0 is compatible with Scala 2.9.2 and Akka 2.0.3
 * amqp-client 1.1 is compatible with Scala 2.9.2 and Akka 2.0.5
@@ -64,6 +64,7 @@ The latest snapshot (development) version is 1.5-SNAPSHOT, the latest released v
 * amqp-client 1.2 is compatible with Scala 2.10 and Akka 2.1
 * amqp-client 1.3 is compatible with Scala 2.10 and Akka 2.2
 * amqp-client 1.4 is compatible with Scala 2.10, Scala 2.11 and Akka 2.3.2
+* amqp-client 1.5 is compatible with Scala 2.10, Scala 2.11 and Akka 2.3.11
 
 ## Library design
 
