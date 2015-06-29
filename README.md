@@ -201,6 +201,13 @@ Or can can wrap our initialization messages with Record to make sure they will b
 
 ```
 
+If you have a reason to add a heartbeat (for instance, to keep your load balancer from dropping the connection), you can easily do so:
+
+``` scala
+  val connFactory = new ConnectionFactory()
+  connFactory.setRequestedHeartbeat(5) // seconds
+```
+
 ## RPC patterns
 
 Typical RPC with AMQP follows this pattern:
