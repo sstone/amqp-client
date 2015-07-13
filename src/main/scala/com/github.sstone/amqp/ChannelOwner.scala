@@ -1,5 +1,7 @@
 package com.github.sstone.amqp
 
+import java.util.UUID._
+
 import collection.JavaConversions._
 import com.rabbitmq.client.AMQP.BasicProperties
 import com.rabbitmq.client._
@@ -23,13 +25,19 @@ object ChannelOwner {
 
   def props(init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None): Props = Props(new ChannelOwner(init, channelParams))
 
-  private[amqp] class Forwarder(channel: Channel) extends Actor with ActorLogging {
+  private[amqp] class Forwarder(channel: Channel, private var channelId: String) extends Actor with ActorLogging {
 
     override def postStop(): Unit = {
       Try(channel.close())
     }
 
     override def unhandled(message: Any): Unit = log.warning(s"unhandled message $message")
+
+    private def publishAndReturnUniqueKey(c: Channel, p: Publish): MessageUniqueKey = {
+      val seqNo = c.getNextPublishSeqNo
+      c.basicPublish(p.exchange, p.key, p.mandatory, p.immediate, p.properties.getOrElse(new AMQP.BasicProperties.Builder().build()), p.body)
+      MessageUniqueKey(seqNo, channelId)
+    }
 
     def receive = {
       case request@AddShutdownListener(listener) => {
@@ -51,10 +59,9 @@ object ChannelOwner {
           def handleFlow(active: Boolean): Unit = listener ! HandleFlow(active)
         }))
       }
-      case request@Publish(exchange, routingKey, body, properties, mandatory, immediate) => {
+      case request@Publish(_, _, _, _, _, _) => {
         log.debug("publishing %s".format(request))
-        val props = properties getOrElse new AMQP.BasicProperties.Builder().build()
-        sender ! withChannel(channel, request)(c => c.basicPublish(exchange, routingKey, mandatory, immediate, props, body))
+        sender ! withChannel(channel, request)(c => publishAndReturnUniqueKey(c, request))
       }
       case request@Transaction(publish) => {
         sender ! withChannel(channel, request) {
@@ -118,9 +125,11 @@ object ChannelOwner {
       }
       case request@AddConfirmListener(listener) => {
         sender ! withChannel(channel, request)(c => c.addConfirmListener(new ConfirmListener {
-          def handleAck(deliveryTag: Long, multiple: Boolean): Unit = listener ! HandleAck(deliveryTag, multiple)
+          def handleAck(deliveryTag: Long, multiple: Boolean): Unit =
+            listener ! HandleAck(deliveryTag, multiple, channelId, System.currentTimeMillis())
 
-          def handleNack(deliveryTag: Long, multiple: Boolean): Unit = listener ! HandleNack(deliveryTag, multiple)
+          def handleNack(deliveryTag: Long, multiple: Boolean): Unit =
+            listener ! HandleNack(deliveryTag, multiple, channelId, System.currentTimeMillis())
         }))
       }
       case request@WaitForConfirms(timeout) => {
@@ -181,7 +190,7 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
 
   def disconnected: Receive = LoggingReceive {
     case channel: Channel => {
-      val forwarder = context.actorOf(Props(new Forwarder(channel)), name = "forwarder")
+      val forwarder = context.actorOf(Props(new Forwarder(channel, randomUUID().toString)), name = "forwarder")
       forwarder ! AddShutdownListener(self)
       forwarder ! AddReturnListener(self)
       onChannel(channel, forwarder)

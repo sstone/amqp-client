@@ -1,5 +1,9 @@
-resolvers += "Sonatype snapshots" at "http://oss.sonatype.org/content/repositories/snapshots/"
+// Comment to get more information during initialization
+logLevel := Level.Warn
 
-addSbtPlugin("com.github.mpeltonen" % "sbt-idea" % "1.2.0-SNAPSHOT")
+resolvers += "Gawker Public Group" at "https://nexus.kinja-ops.com/nexus/content/groups/public"
 
-addSbtPlugin("com.github.gseitz" % "sbt-release" % "0.8")
+credentials += Credentials(Path.userHome / ".ivy2" / ".credentials")
+
+// The Typesafe repository
+resolvers += "Typesafe repository" at "http://repo.typesafe.com/typesafe/releases/"

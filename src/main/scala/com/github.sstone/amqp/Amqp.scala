@@ -136,9 +136,11 @@ object Amqp {
 
   case class AddConfirmListener(listener: ActorRef) extends Request
 
-  case class HandleAck(deliveryTag: Long, multiple: Boolean)
+  case class HandleAck(deliveryTag: Long, multiple: Boolean, channelId: String, timestamp: Long)
 
-  case class HandleNack(deliveryTag: Long, multiple: Boolean)
+  case class HandleNack(deliveryTag: Long, multiple: Boolean, channelId: String, timestamp: Long)
+
+  case class MessageUniqueKey(seqNo: Long, channelId: String)
 
   /**
    * sent back by a publisher when the request was processed successfully
