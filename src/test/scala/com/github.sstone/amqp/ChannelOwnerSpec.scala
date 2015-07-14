@@ -62,7 +62,7 @@ class ChannelOwnerSpec extends ChannelSpec  {
     channelOwner ! AddReturnListener(self)
     val Amqp.Ok(_, None) = receiveOne(1 seconds)
     channelOwner ! Publish("", "no_such_queue", "test".getBytes)
-    val Amqp.Ok(_, None) = receiveOne(1 seconds)
+    val Amqp.Ok(_, Some(MessageUniqueKey(_, _))) = receiveOne(1 seconds)
     expectMsgClass(1 seconds, classOf[ReturnedMessage])
   }
 
