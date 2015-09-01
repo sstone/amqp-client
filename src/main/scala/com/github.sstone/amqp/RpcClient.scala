@@ -8,7 +8,7 @@ import com.rabbitmq.client.{Envelope, Channel, DefaultConsumer}
 
 object RpcClient {
 
-  case class Request(publish: List[Publish], numberOfResponses: Int = 1)
+  case class Request(publish: List[Publish], numberOfResponses: Int = 1, updateEvery: Option[Int] = None)
 
   object Request {
     def apply(publish: Publish) = new Request(List(publish), 1)
@@ -16,11 +16,13 @@ object RpcClient {
 
   case class Response(deliveries: List[Delivery])
 
+  case class Status(correlationId: String, received: Int, total: Int)
+
   case class Undelivered(msg: ReturnedMessage)
 
   def props(channelParams: Option[ChannelParameters] = None): Props = Props(new RpcClient(channelParams))
 
-  private[amqp] case class RpcResult(destination: ActorRef, expected: Int, deliveries: scala.collection.mutable.ListBuffer[Delivery])
+  private[amqp] case class RpcResult(destination: ActorRef, expected: Int, updateEvery: Option[Int], deliveries: scala.collection.mutable.ListBuffer[Delivery])
 
 }
 
@@ -48,13 +50,13 @@ class RpcClient(channelParams: Option[ChannelParameters] = None) extends Channel
   }
 
   override def disconnected: Receive = LoggingReceive ({
-    case request@Request(publish, numberOfResponses) => {
+    case request@Request(publish, numberOfResponses, updateEvery) => {
       log.warning(s"not connected, cannot send rpc request")
     }
   }: Receive) orElse super.disconnected
 
   override def connected(channel: Channel, forwarder: ActorRef): Receive = LoggingReceive({
-    case Request(publish, numberOfResponses) => {
+    case Request(publish, numberOfResponses, updateEvery) => {
       counter = counter + 1
       log.debug(s"sending ${publish.size} messages, replyTo = $queue")
       publish.foreach(p => {
@@ -62,7 +64,10 @@ class RpcClient(channelParams: Option[ChannelParameters] = None) extends Channel
         channel.basicPublish(p.exchange, p.key, p.mandatory, p.immediate, props, p.body)
       })
       if (numberOfResponses > 0) {
-        correlationMap += (counter.toString -> RpcResult(sender, numberOfResponses, collection.mutable.ListBuffer.empty[Delivery]))
+        correlationMap += (counter.toString -> RpcResult(sender, numberOfResponses, updateEvery, collection.mutable.ListBuffer.empty[Delivery]))
+        if (updateEvery.isDefined){
+          sender ! Status(counter.toString, 0, numberOfResponses)
+        }
       }
     }
     case delivery@Delivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]) => {
@@ -73,6 +78,12 @@ class RpcClient(channelParams: Option[ChannelParameters] = None) extends Channel
           if (results.deliveries.length == results.expected) {
             results.destination ! Response(results.deliveries.toList)
             correlationMap -= properties.getCorrelationId
+          }else {
+            results.updateEvery
+            .filter(f => results.deliveries.length % f == 0)
+            .foreach { e =>
+              results.destination ! Status(properties.getCorrelationId, results.deliveries.length, results.expected)
+            }
           }
         }
         case None => log.warning("unexpected message with correlation id " + properties.getCorrelationId)
