@@ -18,6 +18,8 @@ object RpcClient {
 
   case class Status(correlationId: String, received: Int, total: Int)
 
+  case class StatusRequest(correlationId: String)
+
   case class Undelivered(msg: ReturnedMessage)
 
   def props(channelParams: Option[ChannelParameters] = None): Props = Props(new RpcClient(channelParams))
@@ -88,6 +90,14 @@ class RpcClient(channelParams: Option[ChannelParameters] = None) extends Channel
         }
         case None => log.warning("unexpected message with correlation id " + properties.getCorrelationId)
       }
+    }
+    case StatusRequest(correlationId) => {
+      sender ! (correlationMap.get(correlationId) match {
+        case Some(results) =>
+          Status(correlationId, results.deliveries.length, results.expected)
+        case None =>
+          Status(correlationId, 0, 0)
+      })
     }
     case msg@ReturnedMessage(replyCode, replyText, exchange, routingKey, properties, body) => {
       correlationMap.get(properties.getCorrelationId) match {
