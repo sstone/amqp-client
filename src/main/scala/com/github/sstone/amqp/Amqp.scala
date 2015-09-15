@@ -7,6 +7,7 @@ import akka.actor.{Actor, Props, ActorRef, ActorRefFactory}
 import akka.actor.FSM.{SubscribeTransitionCallBack, CurrentState, Transition}
 import java.util.concurrent.CountDownLatch
 
+
 object Amqp {
 
   /**
@@ -103,6 +104,8 @@ object Amqp {
   case class DeclareExchange(exchange: ExchangeParameters) extends Request
 
   case class DeleteExchange(name: String, ifUnused: Boolean = false) extends Request
+
+  case class ExchangeBind(destination: String, source: String, routing_key: String, args: Map[String, AnyRef] = Map.empty) extends Request
 
   case class QueueBind(queue: String, exchange: String, routing_key: String, args: Map[String, AnyRef] = Map.empty) extends Request
 
