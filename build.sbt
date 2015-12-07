@@ -2,23 +2,23 @@ name := "amqp-client"
 
 organization := "com.github.sstone"
  
-version := "1.3-SNAPSHOT"
+version := "1.5-SNAPSHOT"
  
-scalaVersion := "2.10.1"
+scalaVersion := "2.11.7"
 
 scalacOptions  ++= Seq("-feature", "-language:postfixOps")
  
 resolvers += "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/"
 
 libraryDependencies <<= scalaVersion { scala_version => 
-    val akkaVersion   = "2.2.3"
+    val akkaVersion   = "2.3.11"
     Seq(
-        "com.typesafe.akka"    %% "akka-actor"          % akkaVersion,
-        "com.rabbitmq"         % "amqp-client"          % "3.2.1",
+        "com.rabbitmq"         % "amqp-client"          % "3.5.2",
+        "com.typesafe.akka"    %% "akka-actor"          % akkaVersion % "provided",
+        "com.typesafe.akka"    %% "akka-slf4j"          % akkaVersion % "test",
         "com.typesafe.akka"    %% "akka-testkit"        % akkaVersion  % "test",
-        "org.scalatest"        %% "scalatest"           % "1.9.1" % "test",
-        "junit"           	   % "junit"                % "4.11" % "test",
-        "com.typesafe.akka"    %  "akka-slf4j_2.10"     % akkaVersion,
-        "ch.qos.logback"       %  "logback-classic"     % "1.0.0"
+        "org.scalatest"        %% "scalatest"           % "2.2.5" % "test",
+        "ch.qos.logback"       %  "logback-classic"     % "1.1.2" % "test",
+        "junit"           	   % "junit"                % "4.12" % "test"
     )
 }
