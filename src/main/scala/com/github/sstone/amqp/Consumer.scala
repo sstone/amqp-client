@@ -80,7 +80,7 @@ class Consumer(listener: Option[ActorRef],
       sender ! withChannel(channel, request)(c => {
         declareExchange(c, binding.exchange)
         val queueName = declareQueue(c, binding.queue).getQueue
-        c.queueBind(queueName, binding.exchange.name, binding.routingKey)
+        binding.routingKeys.foreach(key => c.queueBind(queueName, binding.exchange.name, key))
         val actualConsumerTag = c.basicConsume(queueName, autoack, consumerTag, noLocal, exclusive, arguments, consumer.get)
         log.debug(s"using consumer $actualConsumerTag")
         actualConsumerTag
