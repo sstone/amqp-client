@@ -15,8 +15,8 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <scala.version>2.11.6</scala.version>
-        <akka.version>2.3.11</akka.version>
+        <scala.version>2.11.8</scala.version>
+        <akka.version>2.4.3</akka.version>
     </properties>
 
     <licenses>
@@ -44,7 +44,7 @@
             <plugin>
                 <groupId>net.alchim31.maven</groupId>
                 <artifactId>scala-maven-plugin</artifactId>
-                <version>3.2.0</version>
+                <version>3.2.2</version>
             </plugin>
         </plugins>
     </reporting>
@@ -57,8 +57,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>2.3.2</version>
                 <configuration>
-                    <source>1.6</source>
-                    <target>1.6</target>
+                    <source>1.8</source>
+                    <target>1.8</target>
                 </configuration>
             </plugin>
             <plugin>
@@ -74,7 +74,7 @@
                         <plugin>
                             <groupId>net.alchim31.maven</groupId>
                             <artifactId>scala-maven-plugin</artifactId>
-                            <version>3.2.0</version>
+                            <version>3.2.2</version>
                             <configuration>
                                 <jvmArgs>
                                     <jvmArg>-Xms64m</jvmArg>
@@ -147,7 +147,7 @@
         <dependency>
             <groupId>com.rabbitmq</groupId>
             <artifactId>amqp-client</artifactId>
-            <version>3.5.2</version>
+            <version>3.6.1</version>
         </dependency>
         <dependency>
             <groupId>com.typesafe.akka</groupId>
