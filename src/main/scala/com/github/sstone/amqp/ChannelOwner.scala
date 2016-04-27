@@ -89,6 +89,10 @@ object ChannelOwner {
         log.debug("binding queue {} to key {} on exchange {}", queue, routingKey, exchange)
         sender ! withChannel(channel, request)(c => c.queueBind(queue, exchange, routingKey, args))
       }
+      case request@ExchangeBind(destination, source, routingKey, args) => {
+        log.debug("binding exchange {} to key {} on exchange {}", destination, routingKey, source)
+        sender ! withChannel(channel, request)(c => c.exchangeBind(destination, source, routingKey, args))
+      }
       case request@QueueUnbind(queue, exchange, routingKey, args) => {
         log.debug("unbinding queue {} to key {} on exchange {}", queue, routingKey, exchange)
         sender ! withChannel(channel, request)(c => c.queueUnbind(queue, exchange, routingKey, args))
