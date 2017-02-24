@@ -7,6 +7,7 @@
     </parent>
     <groupId>com.github.sstone</groupId>
     <artifactId>amqp-client_2.11</artifactId>
+    <version>1.5.1</version>
     <version>1.6-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>amqp-client</name>

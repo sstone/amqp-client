@@ -75,7 +75,7 @@ object Amqp {
    */
   case class ChannelParameters(qos: Int, global: Boolean = false)
 
-  case class Binding(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String)
+  case class Binding(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, consumeOnly: Boolean = false)
 
   /**
    * requests that can be sent to a ChannelOwner actor
