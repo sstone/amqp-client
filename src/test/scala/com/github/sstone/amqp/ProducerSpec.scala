@@ -29,7 +29,7 @@ class ProducerSpec extends ChannelSpec {
       consumer ! AddBinding(Binding(exchange, queue, routingKey))
 
       fishForMessage(1 second) {
-        case Amqp.Ok(AddBinding(Binding(`exchange`, `queue`, `routingKey`)), _) => true
+        case Amqp.Ok(AddBinding(Binding(`exchange`, `queue`, `routingKey`, false)), _) => true
         case msg => {
           println(s"unexpected $msg")
           false
@@ -55,7 +55,7 @@ class ProducerSpec extends ChannelSpec {
       consumer ! AddBinding(Binding(exchange, queue, routingKey))
 
       fishForMessage(1 second) {
-        case Amqp.Ok(AddBinding(Binding(`exchange`, `queue`, `routingKey`)), _) => true
+        case Amqp.Ok(AddBinding(Binding(`exchange`, `queue`, `routingKey`, false)), _) => true
         case _ => false
       }
 
