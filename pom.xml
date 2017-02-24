@@ -5,9 +5,9 @@
         <artifactId>oss-parent</artifactId>
         <version>7</version>
     </parent>
-    <groupId>com.github.sstone</groupId>
+    <groupId>com.weather</groupId>
     <artifactId>amqp-client_2.11</artifactId>
-    <version>1.6-SNAPSHOT</version>
+    <version>1.6</version>
     <packaging>jar</packaging>
     <name>amqp-client</name>
     <description>Simple AMQP client for Scala/Akka</description>
