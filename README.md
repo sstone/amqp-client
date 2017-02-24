@@ -42,7 +42,7 @@ So it kind of works and will be maintained for some time :-)
   <dependency>
     <groupId>com.github.sstone</groupId>
     <artifactId>amqp-client_SCALA-VERSION</artifactId>
-    <version>1.4</version>
+    <version>1.5</version>
   </dependency>
   <dependency>
     <groupId>com.typesafe.akka</groupId>
@@ -56,7 +56,7 @@ So it kind of works and will be maintained for some time :-)
 Please note that the Akka dependency is now in the "provided" scope which means that you'll have to define it explicitly in your
 maven/sbt projects. 
 
-The latest snapshot (development) version is 1.5-SNAPSHOT, the latest released version is 1.4
+The latest snapshot (development) version is 1.6-SNAPSHOT, the latest released version is 1.5
 
 * amqp-client 1.0 is compatible with Scala 2.9.2 and Akka 2.0.3
 * amqp-client 1.1 is compatible with Scala 2.9.2 and Akka 2.0.5
@@ -64,6 +64,9 @@ The latest snapshot (development) version is 1.5-SNAPSHOT, the latest released v
 * amqp-client 1.2 is compatible with Scala 2.10 and Akka 2.1
 * amqp-client 1.3 is compatible with Scala 2.10 and Akka 2.2
 * amqp-client 1.4 is compatible with Scala 2.10, Scala 2.11 and Akka 2.3.2
+* amqp-client 1.5 is compatible with Scala 2.10, Scala 2.11 and Akka 2.3.11
+* amqp-client 1.6-SNAPSHOT is compatible with Scala 2.10, Scala 2.11 and Akka 2.4.3
+ 
 
 ## Library design
 
@@ -135,7 +138,7 @@ again they will send a new AMQP channel to each of their ChannelOwner children.
 
 Likewise, if the channel owned by a ChannelOwner is shut down because of an error it will request a new one from its parent.
 
-In this case you might want to "replay" some of the messages that were sent to the ChannelOnwer actor before it lost
+In this case you might want to "replay" some of the messages that were sent to the ChannelOwner actor before it lost
 its channel, like queue declarations and bindings.
 
 For this, you have 2 options:
@@ -198,6 +201,13 @@ Or can can wrap our initialization messages with Record to make sure they will b
 
   consumer ! Record(AddBinding(Binding(StandardExchanges.amqDirect, QueueParameters("my_queue", passive = false, durable = false, exclusive = false, autodelete = true), "my_key")))
 
+```
+
+If you have a reason to add a heartbeat (for instance, to keep your load balancer from dropping the connection), you can easily do so:
+
+``` scala
+  val connFactory = new ConnectionFactory()
+  connFactory.setRequestedHeartbeat(5) // seconds
 ```
 
 ## RPC patterns
@@ -340,7 +350,7 @@ publish to queue 'B', 'B' processors publish to queue 'C' ....
 
 ## Samples
 
-You can check either samples [src/main/scala/com/github.sstone/amqp/samples](https://github.com/sstone/amqp-client/tree/scala2.11/src/main/scala/com/github.sstone/amqp/samples) or spec tests [src/test/scala/com/github.sstone/amqp](https://github.com/sstone/amqp-client/tree/scala2.11/src/test/scala/com/github.sstone/amqp) for examples of how to use the library.
+You can check either samples [src/main/scala/com/github/sstone/amqp/samples](https://github.com/sstone/amqp-client/tree/scala2.11/src/main/scala/com/github/sstone/amqp/samples) or spec tests [src/test/scala/com/github/sstone/amqp](https://github.com/sstone/amqp-client/tree/scala2.11/src/test/scala/com/github/sstone/amqp) for examples of how to use the library.
 
 
 

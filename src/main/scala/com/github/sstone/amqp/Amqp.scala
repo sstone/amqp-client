@@ -71,8 +71,9 @@ object Amqp {
    *            to one then the consumer using this channel will not receive another message until it has acknowledged or rejected
    *            its current message. This feature is commonly used as a load-balancing strategy using multiple consumers and
    *            a shared queue.
+   * @param global true if the settings should be applied to the entire channel rather than each consumer
    */
-  case class ChannelParameters(qos: Int)
+  case class ChannelParameters(qos: Int, global: Boolean = false)
 
   case class Binding(exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, consumeOnly: Boolean = false)
 
