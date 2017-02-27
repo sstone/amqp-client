@@ -78,9 +78,11 @@ class Consumer(listener: Option[ActorRef],
     case request@AddBinding(binding) => {
       log.debug("processing %s".format(request))
       sender ! withChannel(channel, request)(c => {
-        declareExchange(c, binding.exchange)
         val queueName = declareQueue(c, binding.queue).getQueue
-        c.queueBind(queueName, binding.exchange.name, binding.routingKey)
+        if (!binding.consumeOnly) {
+          declareExchange(c, binding.exchange)
+          c.queueBind(queueName, binding.exchange.name, binding.routingKey)
+        }
         val actualConsumerTag = c.basicConsume(queueName, autoack, consumerTag, noLocal, exclusive, arguments, consumer.get)
         log.debug(s"using consumer $actualConsumerTag")
         actualConsumerTag

@@ -42,7 +42,7 @@ class PendingAcksSpec extends ChannelSpec with WordSpecLike {
       Amqp.waitForConnection(system, consumer, producer).await(1, TimeUnit.SECONDS)
 
       consumer ! AddBinding(Binding(exchange, queue, routingKey))
-      val Amqp.Ok(AddBinding(Binding(_, _, _)), _) = receiveOne(1 second)
+      val Amqp.Ok(AddBinding(Binding(_, _, _, _)), _) = receiveOne(1 second)
 
       val message = "yo!".getBytes
 
@@ -72,7 +72,7 @@ class PendingAcksSpec extends ChannelSpec with WordSpecLike {
 
 
       consumer1 ! AddBinding(Binding(exchange, queue, routingKey))
-      val Amqp.Ok(AddBinding(Binding(_, _, _)), _) = receiveOne(1 second)
+      val Amqp.Ok(AddBinding(Binding(_, _, _, _)), _) = receiveOne(1 second)
 
       // kill first consumer
       consumer ! PoisonPill
