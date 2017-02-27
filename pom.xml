@@ -19,6 +19,33 @@
         <akka.version>2.4.3</akka.version>
     </properties>
 
+    <distributionManagement>
+        <snapshotRepository>
+            <id>Jenkins-Util-Snapshots-repository</id>
+            <name>SSG-DEV Snapshots Repo</name>
+            <url>scpexe://dev-user@jenkinsutil.dev.sun.weather.com:/opt/html/pub/mvn/ssg-snapshots</url>
+        </snapshotRepository>
+        <repository>
+            <id>Jenkins-Util-repository</id>
+            <name>SSG-DEV Release Repo</name>
+            <url>scpexe://dev-user@jenkinsutil.dev.sun.weather.com:/opt/html/pub/mvn/ssg</url>
+        </repository>
+    </distributionManagement>
+
+    <repositories>
+        <repository>
+            <id>Jenkins-Util-repository</id>
+            <name>SUN Release Repo</name>
+            <url>https://jenkinsutil.dev.sun.weather.com/pub/mvn/ssg</url>
+        </repository>
+        <repository>
+            <id>Jenkins-Util-Snapshots-repository</id>
+            <name>SUN Snapshots Repo</name>
+            <url>https://jenkinsutil.dev.sun.weather.com/pub/mvn/ssg-snapshots</url>
+            <snapshots />
+        </repository>
+    </repositories>
+
     <licenses>
         <license>
             <url>https://raw.github.com/sstone/amqp-client/master/LICENCE.txt</url>
