@@ -14,7 +14,7 @@ import com.github.sstone.amqp.ChannelOwner.NotConnectedError
 import scala.concurrent.Await
 
 @RunWith(classOf[JUnitRunner])
-class ChannelOwnerSpec extends ChannelSpec  {
+class ChannelOwnerSpec extends ChannelSpec {
   "ChannelOwner" should {
 
     "implement basic error handling" in {
