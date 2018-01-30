@@ -168,7 +168,7 @@ class ConsumerSpec extends ChannelSpec {
       val probe = TestProbe()
       val queue = randomQueue
       val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(
-        listener = Some(probe.ref), autoack = false, init = Seq.empty[Request], channelParams = None,
+        listener = Some(probe.ref), autoack = false, init = Seq.empty[RequestAndSender], channelParams = None,
         consumerTag = "", noLocal = false, exclusive = true, arguments = Map.empty), timeout = 5000 millis)
       val producer = ConnectionOwner.createChildActor(conn, ChannelOwner.props())
 
@@ -186,7 +186,7 @@ class ConsumerSpec extends ChannelSpec {
       assert(delivery.consumerTag === consumerTag)
 
       val consumer1 = ConnectionOwner.createChildActor(conn, Consumer.props(
-        listener = Some(probe.ref), autoack = false, init = Seq.empty[Request], channelParams = None,
+        listener = Some(probe.ref), autoack = false, init = Seq.empty[RequestAndSender], channelParams = None,
         consumerTag = "", noLocal = false, exclusive = true, arguments = Map.empty), timeout = 5000 millis)
 
       consumer1 ! AddStatusListener(probe.ref)
