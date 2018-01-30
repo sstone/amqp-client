@@ -21,7 +21,7 @@ object ChannelOwner {
 
   case class NotConnectedError(request: Request)
 
-  def props(init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None): Props = Props(new ChannelOwner(init, channelParams))
+  def props(init: Seq[RequestAndSender] = Seq.empty[RequestAndSender], channelParams: Option[ChannelParameters] = None): Props = Props(new ChannelOwner(init, channelParams))
 
   private[amqp] class Forwarder(channel: Channel) extends Actor with ActorLogging {
 
@@ -153,11 +153,11 @@ object ChannelOwner {
   }
 }
 
-class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None) extends Actor with ActorLogging {
+class ChannelOwner(init: Seq[RequestAndSender] = Seq.empty[RequestAndSender], channelParams: Option[ChannelParameters] = None) extends Actor with ActorLogging {
 
   import ChannelOwner._
 
-  var requestLog: Vector[Request] = init.toVector
+  var requestLog: Vector[RequestAndSender] = init.toVector
   val statusListeners = mutable.HashSet.empty[ActorRef]
 
   override def preStart() = context.parent ! ConnectionOwner.CreateChannel
@@ -185,13 +185,13 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
       forwarder ! AddShutdownListener(self)
       forwarder ! AddReturnListener(self)
       onChannel(channel, forwarder)
-      requestLog.map(r => self forward r)
+      requestLog.foreach { case (request, sender) => self.tell(request, sender.getOrElse(context.sender())) }
       log.info(s"got channel $channel")
       statusListeners.map(a => a ! Connected)
       context.become(connected(channel, forwarder))
     }
     case Record(request: Request) => {
-      requestLog :+= request
+      requestLog :+= request -> Some(sender())
     }
     case AddStatusListener(actor) => addStatusListener(actor)
 
@@ -203,7 +203,7 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
   def connected(channel: Channel, forwarder: ActorRef): Receive = LoggingReceive {
     case Amqp.Ok(_, _) => ()
     case Record(request: Request) => {
-      requestLog :+= request
+      requestLog :+= request -> Some(sender())
       self forward request
     }
     case AddStatusListener(listener) => {
