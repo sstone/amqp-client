@@ -1,12 +1,15 @@
 package com.github.sstone.amqp
 
 import akka.actor.ActorSystem
+import akka.pattern.{ask, gracefulStop}
 import akka.testkit.TestProbe
+import akka.util.Timeout
 import com.github.sstone.amqp.Amqp._
-
-import concurrent.duration._
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
+
+import scala.concurrent.Await
+import scala.concurrent.duration._
 
 @RunWith(classOf[JUnitRunner])
 class ConsumerSpec extends ChannelSpecNoTestKit {
@@ -215,6 +218,16 @@ class ConsumerSpec extends ChannelSpecNoTestKit {
       // you cannot have more than 1 exclusive consumer on the same queue
       consumer1 ! AddQueue(queue)
       val Amqp.Error(_, reason) = probe.receiveOne(1 second)
+    }
+    "save sender for requests while disconnected" in {
+      val declareExchange = DeclareExchange(ExchangeParameters(name = "amq.direct", passive = true, exchangeType = ""))
+      val conn = system.actorOf(ConnectionOwner.props(connFactory, 1 second))
+      try {
+        val channelOwner = ConnectionOwner.createChildActor(conn, ChannelOwner.props())
+        val Ok(`declareExchange`, Some(_)) = Await.result(channelOwner.ask(Record(declareExchange))(Timeout(1 second)), 1 second)
+      } finally {
+        Await.result(gracefulStop(conn, 5 seconds), 6 seconds)
+      }
     }
   }
 }
