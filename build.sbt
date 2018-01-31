@@ -6,7 +6,7 @@ version := "1.5-SNAPSHOT"
  
 scalaVersion := "2.11.7"
 
-scalacOptions  ++= Seq("-feature", "-language:postfixOps")
+scalacOptions ++= Seq("-feature", "-language:postfixOps")
  
 resolvers += "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/"
 

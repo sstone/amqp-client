@@ -157,7 +157,7 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
 
   import ChannelOwner._
 
-  var requestLog: Vector[Request] = init.toVector
+  var requestLog: Vector[(Request, Option[ActorRef])] = init.map(_ -> None).toVector
   val statusListeners = mutable.HashSet.empty[ActorRef]
 
   override def preStart() = context.parent ! ConnectionOwner.CreateChannel
@@ -185,13 +185,13 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
       forwarder ! AddShutdownListener(self)
       forwarder ! AddReturnListener(self)
       onChannel(channel, forwarder)
-      requestLog.map(r => self forward r)
+      requestLog.foreach { case (request, sender) => self.tell(request, sender.getOrElse(context.sender())) }
       log.info(s"got channel $channel")
       statusListeners.map(a => a ! Connected)
       context.become(connected(channel, forwarder))
     }
     case Record(request: Request) => {
-      requestLog :+= request
+      requestLog :+= request -> Some(sender())
     }
     case AddStatusListener(actor) => addStatusListener(actor)
 
@@ -203,7 +203,7 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
   def connected(channel: Channel, forwarder: ActorRef): Receive = LoggingReceive {
     case Amqp.Ok(_, _) => ()
     case Record(request: Request) => {
-      requestLog :+= request
+      requestLog :+= request -> Some(sender())
       self forward request
     }
     case AddStatusListener(listener) => {
