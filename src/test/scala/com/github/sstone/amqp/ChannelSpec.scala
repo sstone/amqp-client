@@ -45,6 +45,4 @@ trait ChannelSpecNoTestKit extends WordSpecLike with ShouldMatchers with BeforeA
   }
 }
 
-class ChannelSpec extends TestKit(ActorSystem("TestSystem")) with ChannelSpecNoTestKit with ImplicitSender {
-
-}
+class ChannelSpec extends TestKit(ActorSystem("TestSystem")) with ChannelSpecNoTestKit with ImplicitSender
