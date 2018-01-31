@@ -1,21 +1,25 @@
 package com.github.sstone.amqp
 
+import akka.actor.ActorSystem
 import akka.testkit.TestProbe
 import com.github.sstone.amqp.Amqp._
+
 import concurrent.duration._
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 
 @RunWith(classOf[JUnitRunner])
-class ConsumerSpec extends ChannelSpec {
+class ConsumerSpec extends ChannelSpecNoTestKit {
+  override implicit val system: ActorSystem = ActorSystem("ConsumerSpec")
   "Consumers" should {
     "receive messages sent by producers" in {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = QueueParameters(name = "", passive = false, exclusive = true)
-      ignoreMsg {
+      val probe = TestProbe()
+      implicit val sender = probe.ref
+      probe.ignoreMsg {
         case Amqp.Ok(p:Publish, _) => true
       }
-      val probe = TestProbe()
       val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(listener = Some(probe.ref)), timeout = 5000 millis)
       val producer = ConnectionOwner.createChildActor(conn, ChannelOwner.props())
       consumer ! AddStatusListener(probe.ref)
@@ -23,7 +27,7 @@ class ConsumerSpec extends ChannelSpec {
       probe.expectMsg(1 second, ChannelOwner.Connected)
       probe.expectMsg(1 second, ChannelOwner.Connected)
       consumer ! AddBinding(Binding(exchange, queue, "my_key"))
-      val check = receiveOne(1 second)
+      val check = probe.receiveOne(1 second)
       println(check)
       val message = "yo!".getBytes
       producer ! Publish(exchange.name, "my_key", message)
@@ -32,12 +36,16 @@ class ConsumerSpec extends ChannelSpec {
     "be able to set their channel's prefetch size" in {
       val queue = randomQueue
       val probe = TestProbe()
+      implicit val sender = probe.ref
+      probe.ignoreMsg {
+        case Amqp.Ok(p:Publish, _) => true
+      }
       val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(listener = probe.ref, autoack = false, channelParams = Some(ChannelParameters(qos = 3))), timeout = 5000 millis)
       consumer ! AddStatusListener(probe.ref)
       probe.expectMsg(1 second, ChannelOwner.Connected)
 
       consumer ! AddQueue(queue)
-      val Amqp.Ok(AddQueue(_), _) = receiveOne(1 second)
+      val Amqp.Ok(AddQueue(_), _) = probe.receiveOne(1 second)
 
       consumer ! Publish("", queue.name, "test".getBytes("UTF-8"))
       val delivery1 = probe.expectMsgClass(200 milliseconds, classOf[Delivery])
@@ -52,14 +60,15 @@ class ConsumerSpec extends ChannelSpec {
 
       // but if we ack one our our messages we shoule get the 4th delivery
       consumer ! Ack(deliveryTag = delivery1.envelope.getDeliveryTag)
-      val Amqp.Ok(Ack(_), _) = receiveOne(1 second)
+      val Amqp.Ok(Ack(_), _) = probe.receiveOne(1 second)
       val delivery4 = probe.expectMsgClass(200 milliseconds, classOf[Delivery])
     }
     "be restarted if their channel crashes" in {
       val exchange = ExchangeParameters(name = "amq.direct", exchangeType = "", passive = true)
       val queue = randomQueue
       val probe = TestProbe()
-      ignoreMsg {
+      implicit val sender = probe.ref
+      probe.ignoreMsg {
         case Amqp.Ok(p:Publish, _) => true
       }
       val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(listener = Some(probe.ref)), timeout = 5000 millis)
@@ -69,7 +78,7 @@ class ConsumerSpec extends ChannelSpec {
       probe.expectMsg(1 second, ChannelOwner.Connected)
       probe.expectMsg(1 second, ChannelOwner.Connected)
       consumer ! Record(AddBinding(Binding(exchange, queue, "my_key")))
-      val Amqp.Ok(AddBinding(_), _) = receiveOne(1 second)
+      val Amqp.Ok(AddBinding(_), _) = probe.receiveOne(1 second)
 
       val message = "yo!".getBytes
       producer ! Publish(exchange.name, "my_key", message)
@@ -77,8 +86,9 @@ class ConsumerSpec extends ChannelSpec {
 
       // crash the consumer's channel
       consumer ! DeclareExchange(ExchangeParameters(name = "foo", passive = true, exchangeType =""))
-      receiveOne(1 second)
+      val Amqp.Error(DeclareExchange(_), _) = probe.receiveOne(1 second)
       probe.expectMsgAllOf(1 second, ChannelOwner.Disconnected, ChannelOwner.Connected)
+      val Ok(AddBinding(Binding(`exchange`, `queue`, "my_key")), Some(_)) = probe.receiveOne(1 second)
       Thread.sleep(100)
 
       producer ! Publish(exchange.name, "my_key", message)
@@ -89,7 +99,8 @@ class ConsumerSpec extends ChannelSpec {
       val exchange = ExchangeParameters(name = randomExchangeName, exchangeType = "direct", passive = false, durable = false, autodelete = true)
       val queue = randomQueue
       val probe = TestProbe()
-      ignoreMsg {
+      implicit val sender = probe.ref
+      probe.ignoreMsg {
         case Amqp.Ok(p:Publish, _) => true
       }
       val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(listener = Some(probe.ref)), timeout = 5000 millis)
@@ -99,12 +110,12 @@ class ConsumerSpec extends ChannelSpec {
       probe.expectMsg(1 second, ChannelOwner.Connected)
       probe.expectMsg(1 second, ChannelOwner.Connected)
       consumer ! AddBinding(Binding(exchange, queue, "test_key"))
-      val Amqp.Ok(AddBinding(_), _) = receiveOne(1 second)
+      val Amqp.Ok(AddBinding(_), _) = probe.receiveOne(1 second)
 
       // check that our exchange was created
       val exchange1 = exchange.copy(passive = true)
       consumer ! DeclareExchange(exchange1)
-      val Amqp.Ok(DeclareExchange(_), _) = receiveOne(1 second)
+      val Amqp.Ok(DeclareExchange(_), _) = probe.receiveOne(1 second)
 
       // check that publishing works
       producer ! Publish(exchange.name, "test_key", "test message".getBytes("UTF-8"))
@@ -114,7 +125,8 @@ class ConsumerSpec extends ChannelSpec {
       val queue1 = randomQueue
       val queue2 = randomQueue
       val probe = TestProbe()
-      ignoreMsg {
+      implicit val sender = probe.ref
+      probe.ignoreMsg {
         case Amqp.Ok(p:Publish, _) => true
       }
       val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(listener = Some(probe.ref), autoack = false), timeout = 5000 millis)
@@ -125,9 +137,9 @@ class ConsumerSpec extends ChannelSpec {
       probe.expectMsg(1 second, ChannelOwner.Connected)
 
       consumer ! AddQueue(queue1)
-      val Amqp.Ok(AddQueue(_), Some(consumerTag1: String)) = receiveOne(1 second)
+      val Amqp.Ok(AddQueue(_), Some(consumerTag1: String)) = probe.receiveOne(1 second)
       consumer ! AddQueue(queue2)
-      val Amqp.Ok(AddQueue(_), Some(consumerTag2: String)) = receiveOne(1 second)
+      val Amqp.Ok(AddQueue(_), Some(consumerTag2: String)) = probe.receiveOne(1 second)
 
       producer ! Publish("", queue1.name, "test1".getBytes("UTF-8"))
       val delivery1: Delivery = probe.expectMsgClass(classOf[Delivery])
@@ -138,16 +150,17 @@ class ConsumerSpec extends ChannelSpec {
       assert(delivery2.consumerTag === consumerTag2)
 
       consumer ! CancelConsumer(consumerTag1)
-      val Amqp.Ok(CancelConsumer(_), _) = receiveOne(1 second)
+      val Amqp.Ok(CancelConsumer(_), _) = probe.receiveOne(1 second)
 
       producer ! Publish("", queue1.name, "test1".getBytes("UTF-8"))
       probe.expectNoMsg()
     }
     "send consumer cancellation notifications" in {
-      ignoreMsg {
+      val probe = TestProbe()
+      implicit val sender = probe.ref
+      probe.ignoreMsg {
         case Amqp.Ok(p:Publish, _) => true
       }
-      val probe = TestProbe()
       val queue = randomQueue
       val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(listener = Some(probe.ref), autoack = false), timeout = 5000 millis)
       val producer = ConnectionOwner.createChildActor(conn, ChannelOwner.props())
@@ -157,21 +170,22 @@ class ConsumerSpec extends ChannelSpec {
       probe.expectMsg(1 second, ChannelOwner.Connected)
 
       consumer ! AddQueue(queue)
-      val Amqp.Ok(AddQueue(_), Some(consumerTag: String)) = receiveOne(1 second)
+      val Amqp.Ok(AddQueue(_), Some(consumerTag: String)) = probe.receiveOne(1 second)
 
       producer ! Publish("", queue.name, "test".getBytes("UTF-8"))
       val delivery: Delivery = probe.expectMsgClass(classOf[Delivery])
       assert(delivery.consumerTag === consumerTag)
 
       producer ! DeleteQueue(queue.name)
-      val Ok(DeleteQueue(_, _, _), result) = receiveOne(1 second)
+      val Ok(DeleteQueue(_, _, _), result) = probe.receiveOne(1 second)
       probe.expectMsg(1 second, ConsumerCancelled(consumerTag))
     }
     "create exclusive consumers" in {
-      ignoreMsg {
+      val probe = TestProbe()
+      implicit val sender = probe.ref
+      probe.ignoreMsg {
         case Amqp.Ok(p:Publish, _) => true
       }
-      val probe = TestProbe()
       val queue = randomQueue
       val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(
         listener = Some(probe.ref), autoack = false, init = Seq.empty[Request], channelParams = None,
@@ -185,7 +199,7 @@ class ConsumerSpec extends ChannelSpec {
       probe.expectMsg(1 second, ChannelOwner.Connected)
 
       consumer ! AddQueue(queue)
-      val Amqp.Ok(AddQueue(_), Some(consumerTag: String)) = receiveOne(1 second)
+      val Amqp.Ok(AddQueue(_), Some(consumerTag: String)) = probe.receiveOne(1 second)
 
       producer ! Publish("", queue.name, "test".getBytes("UTF-8"))
       val delivery: Delivery = probe.expectMsgClass(classOf[Delivery])
@@ -200,7 +214,7 @@ class ConsumerSpec extends ChannelSpec {
 
       // you cannot have more than 1 exclusive consumer on the same queue
       consumer1 ! AddQueue(queue)
-      val Amqp.Error(_, reason) = receiveOne(1 second)
+      val Amqp.Error(_, reason) = probe.receiveOne(1 second)
     }
   }
 }

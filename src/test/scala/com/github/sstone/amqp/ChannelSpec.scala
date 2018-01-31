@@ -13,11 +13,11 @@ import com.rabbitmq.client.ConnectionFactory
 import com.github.sstone.amqp.Amqp._
 import scala.util.Random
 
-class ChannelSpec extends TestKit(ActorSystem("TestSystem")) with WordSpecLike with ShouldMatchers with BeforeAndAfter with ImplicitSender {
+trait ChannelSpecNoTestKit extends WordSpecLike with ShouldMatchers with BeforeAndAfter {
+  implicit val system: ActorSystem
+
   implicit val timeout = Timeout(5 seconds)
   val connFactory = new ConnectionFactory()
-  val uri = system.settings.config.getString("amqp-client-test.rabbitmq.uri")
-  connFactory.setUri(uri)
   var conn: ActorRef = _
   var channelOwner: ActorRef = _
   val random = new Random()
@@ -32,6 +32,8 @@ class ChannelSpec extends TestKit(ActorSystem("TestSystem")) with WordSpecLike w
 
   before {
     println("before")
+    val uri = system.settings.config.getString("amqp-client-test.rabbitmq.uri")
+    connFactory.setUri(uri)
     conn = system.actorOf(ConnectionOwner.props(connFactory, 1 second))
     channelOwner = ConnectionOwner.createChildActor(conn, ChannelOwner.props())
     waitForConnection(system, conn, channelOwner).await(5, TimeUnit.SECONDS)
@@ -41,4 +43,8 @@ class ChannelSpec extends TestKit(ActorSystem("TestSystem")) with WordSpecLike w
     println("after")
     Await.result(gracefulStop(conn, 5 seconds), 6 seconds)
   }
+}
+
+class ChannelSpec extends TestKit(ActorSystem("TestSystem")) with ChannelSpecNoTestKit with ImplicitSender {
+
 }
