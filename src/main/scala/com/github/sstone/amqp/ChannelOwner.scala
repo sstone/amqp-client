@@ -21,7 +21,7 @@ object ChannelOwner {
 
   case class NotConnectedError(request: Request)
 
-  def props(init: Seq[RequestAndSender] = Seq.empty[RequestAndSender], channelParams: Option[ChannelParameters] = None): Props = Props(new ChannelOwner(init, channelParams))
+  def props(init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None): Props = Props(new ChannelOwner(init, channelParams))
 
   private[amqp] class Forwarder(channel: Channel) extends Actor with ActorLogging {
 
@@ -153,11 +153,11 @@ object ChannelOwner {
   }
 }
 
-class ChannelOwner(init: Seq[RequestAndSender] = Seq.empty[RequestAndSender], channelParams: Option[ChannelParameters] = None) extends Actor with ActorLogging {
+class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None) extends Actor with ActorLogging {
 
   import ChannelOwner._
 
-  var requestLog: Vector[RequestAndSender] = init.toVector
+  var requestLog: Vector[(Request, Option[ActorRef])] = init.map(_ -> None).toVector
   val statusListeners = mutable.HashSet.empty[ActorRef]
 
   override def preStart() = context.parent ! ConnectionOwner.CreateChannel

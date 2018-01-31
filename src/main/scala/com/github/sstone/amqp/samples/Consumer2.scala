@@ -31,7 +31,7 @@ object Consumer2 extends App {
   // to the broker is lost and restored
   val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(
     listener = Some(listener),
-    init = List(AddBinding(Binding(StandardExchanges.amqDirect, queueParams, "my_key")) -> None)
+    init = List(AddBinding(Binding(StandardExchanges.amqDirect, queueParams, "my_key")))
   ), name = Some("consumer"))
 
   // wait till everyone is actually connected to the broker

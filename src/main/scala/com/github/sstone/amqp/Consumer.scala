@@ -9,12 +9,12 @@ import akka.event.LoggingReceive
 import scala.collection.JavaConversions._
 
 object Consumer {
-  def props(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[RequestAndSender] = Seq.empty[RequestAndSender], channelParams: Option[ChannelParameters] = None,
+  def props(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None,
             consumerTag: String = "", noLocal: Boolean = false, exclusive: Boolean = false, arguments: Map[String, AnyRef] = Map.empty): Props =
     Props(new Consumer(listener, autoack, init, channelParams, consumerTag, noLocal, exclusive, arguments))
 
   def props(listener: ActorRef, exchange: ExchangeParameters, queue: QueueParameters, routingKey: String, channelParams: Option[ChannelParameters], autoack: Boolean): Props =
-    props(Some(listener), init = List(AddBinding(Binding(exchange, queue, routingKey)) -> None), channelParams = channelParams, autoack = autoack)
+    props(Some(listener), init = List(AddBinding(Binding(exchange, queue, routingKey))), channelParams = channelParams, autoack = autoack)
 
   def props(listener: ActorRef, channelParams: Option[ChannelParameters], autoack: Boolean): Props = props(Some(listener), channelParams = channelParams, autoack = autoack)
 }
@@ -32,7 +32,7 @@ object Consumer {
  */
 class Consumer(listener: Option[ActorRef],
                autoack: Boolean = false,
-               init: Seq[RequestAndSender] = Seq.empty[RequestAndSender],
+               init: Seq[Request] = Seq.empty[Request],
                channelParams: Option[ChannelParameters] = None,
                consumerTag: String = "",
                noLocal: Boolean = false,
