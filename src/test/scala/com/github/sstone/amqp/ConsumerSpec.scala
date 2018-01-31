@@ -144,6 +144,9 @@ class ConsumerSpec extends ChannelSpec {
       probe.expectNoMsg()
     }
     "send consumer cancellation notifications" in {
+      ignoreMsg {
+        case Amqp.Ok(p:Publish, _) => true
+      }
       val probe = TestProbe()
       val queue = randomQueue
       val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(listener = Some(probe.ref), autoack = false), timeout = 5000 millis)
@@ -165,6 +168,9 @@ class ConsumerSpec extends ChannelSpec {
       probe.expectMsg(1 second, ConsumerCancelled(consumerTag))
     }
     "create exclusive consumers" in {
+      ignoreMsg {
+        case Amqp.Ok(p:Publish, _) => true
+      }
       val probe = TestProbe()
       val queue = randomQueue
       val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(
