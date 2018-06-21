@@ -6,7 +6,7 @@ import com.rabbitmq.client.{Envelope, Channel, DefaultConsumer}
 import com.rabbitmq.client.AMQP.BasicProperties
 import akka.event.LoggingReceive
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 object Consumer {
   def props(listener: Option[ActorRef], autoack: Boolean = false, init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None,
@@ -66,7 +66,7 @@ class Consumer(listener: Option[ActorRef],
       log.debug("processing %s".format(request))
       sender ! withChannel(channel, request)(c => {
         val queueName = declareQueue(c, queue).getQueue
-        val actualConsumerTag = c.basicConsume(queueName, autoack, consumerTag, noLocal, exclusive, arguments, consumer.get)
+        val actualConsumerTag = c.basicConsume(queueName, autoack, consumerTag, noLocal, exclusive, arguments.asJava, consumer.get)
         log.debug(s"using consumer $actualConsumerTag")
         actualConsumerTag
       })
@@ -81,7 +81,7 @@ class Consumer(listener: Option[ActorRef],
         declareExchange(c, binding.exchange)
         val queueName = declareQueue(c, binding.queue).getQueue
         c.queueBind(queueName, binding.exchange.name, binding.routingKey)
-        val actualConsumerTag = c.basicConsume(queueName, autoack, consumerTag, noLocal, exclusive, arguments, consumer.get)
+        val actualConsumerTag = c.basicConsume(queueName, autoack, consumerTag, noLocal, exclusive, arguments.asJava, consumer.get)
         log.debug(s"using consumer $actualConsumerTag")
         actualConsumerTag
       })

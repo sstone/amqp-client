@@ -2,32 +2,28 @@ name := "amqp-client"
 
 organization := "com.kinja"
  
-version := "1.5.1" + {if (System.getProperty("JENKINS_BUILD") == null) "-SNAPSHOT" else ""}
+version := "1.5.1" + (if (RELEASE_BUILD) "" else "-SNAPSHOT")
  
-scalaVersion := "2.11.6"
+crossScalaVersions := Seq("2.11.8", "2.12.6")
 
-scalacOptions  ++= Seq("-feature", "-language:postfixOps")
+scalaVersion := crossScalaVersions.value.head
  
-resolvers += "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/"
+val akkaVersion = "2.5.11"
 
-resolvers += "Gawker Public Group" at "https://nexus.kinja-ops.com/nexus/content/groups/public/"
-
-libraryDependencies <<= scalaVersion { scala_version =>
-    val akkaVersion   = "2.3.12"
-    Seq(
-        "com.typesafe.akka"    %% "akka-actor"          % akkaVersion % "provided",
-        "com.rabbitmq"         % "amqp-client"          % "3.2.1",
-        "com.typesafe.akka"    %% "akka-testkit"        % akkaVersion  % "test",
-        "org.scalatest"        %% "scalatest"           % "2.2.4" % "test",
-        "junit"                % "junit"                % "4.11" % "test",
-        "com.typesafe.akka"    %% "akka-slf4j"          % akkaVersion % "provided",
-        "ch.qos.logback"       %  "logback-classic"     % "1.0.0" % "provided"
-    )
-}
-
-credentials += Credentials(Path.userHome / ".ivy2" / ".credentials")
-
-publishTo <<= (version)(version =>
-    if (version endsWith "SNAPSHOT") Some("Gawker Snapshots" at "https://nexus.kinja-ops.com/nexus/content/repositories/snapshots/")
-    else                             Some("Gawker Releases" at "https://nexus.kinja-ops.com/nexus/content/repositories/releases/")
+scalacOptions ++= Seq(
+	"-feature",
+	"-deprecation",
+	"-language:postfixOps"
 )
+
+libraryDependencies ++= Seq(
+	"com.typesafe.akka"    %% "akka-actor"          % akkaVersion % Provided,
+	"com.rabbitmq"         % "amqp-client"          % "3.2.1",
+	"com.typesafe.akka"    %% "akka-testkit"        % akkaVersion  % Test,
+	"org.scalatest"        %% "scalatest"           % "3.0.5" % Test,
+	"junit"                % "junit"                % "4.12" % Test,
+	"com.typesafe.akka"    %% "akka-slf4j"          % akkaVersion % Provided,
+	"ch.qos.logback"       %  "logback-classic"     % "1.0.0" % Provided
+)
+
+testOptions in Test := Seq.empty

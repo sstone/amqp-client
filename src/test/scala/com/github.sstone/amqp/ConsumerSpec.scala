@@ -48,7 +48,7 @@ class ConsumerSpec extends ChannelSpec {
 
       // we have 3 pending messages, this one should not be received
       consumer ! Publish("", queue.name, "test".getBytes("UTF-8"))
-      probe.expectNoMsg(500 milliseconds)
+      probe.expectNoMessage(500 milliseconds)
 
       // but if we ack one our our messages we shoule get the 4th delivery
       consumer ! Ack(deliveryTag = delivery1.envelope.getDeliveryTag)
@@ -141,7 +141,7 @@ class ConsumerSpec extends ChannelSpec {
       val Amqp.Ok(CancelConsumer(_), _) = receiveOne(1 second)
 
       producer ! Publish("", queue1.name, "test1".getBytes("UTF-8"))
-      probe.expectNoMsg()
+      probe.expectNoMessage()
     }
     "send consumer cancellation notifications" in {
       val probe = TestProbe()

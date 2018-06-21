@@ -40,5 +40,5 @@ object Consumer2 extends App {
   // run the Producer sample now and see what happens
   println("press enter...")
   System.in.read()
-  system.shutdown()
+  system.terminate()
 }

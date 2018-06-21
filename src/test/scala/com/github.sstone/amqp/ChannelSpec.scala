@@ -5,7 +5,7 @@ import akka.actor.{ActorRef, Props, ActorSystem}
 import akka.util.Timeout
 import akka.pattern.{ask, gracefulStop}
 import org.scalatest.{BeforeAndAfter, WordSpecLike}
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 import java.util.concurrent.TimeUnit
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -13,7 +13,7 @@ import com.rabbitmq.client.ConnectionFactory
 import com.github.sstone.amqp.Amqp._
 import scala.util.Random
 
-class ChannelSpec extends TestKit(ActorSystem("TestSystem")) with WordSpecLike with ShouldMatchers with BeforeAndAfter with ImplicitSender {
+class ChannelSpec extends TestKit(ActorSystem("TestSystem")) with WordSpecLike with Matchers with BeforeAndAfter with ImplicitSender {
   implicit val timeout = Timeout(5 seconds)
   val connFactory = new ConnectionFactory()
   val uri = system.settings.config.getString("amqp-client-test.rabbitmq.uri")
