@@ -1,7 +1,7 @@
 package com.github.sstone.amqp
 
 import akka.actor.ActorDSL._
-import akka.actor.{PoisonPill, ActorLogging}
+import akka.actor.{PoisonPill, ActorLogging, Props}
 import akka.testkit.TestProbe
 import com.github.sstone.amqp.Amqp._
 import org.junit.runner.RunWith
@@ -26,7 +26,7 @@ class PendingAcksSpec extends ChannelSpec with WordSpecLike {
       val probe = TestProbe()
 
       // create a consumer that does not ack messages
-      val badListener = actor {
+      val badListener = system.actorOf(Props {
         new Act with ActorLogging {
           become {
             case Delivery(consumerTag, envelope, properties, body) => {
@@ -36,7 +36,7 @@ class PendingAcksSpec extends ChannelSpec with WordSpecLike {
             }
           }
         }
-      }
+      })
       val consumer = ConnectionOwner.createChildActor(conn, Consumer.props(badListener, autoack = false, channelParams = None), name = Some("badConsumer"))
       val producer = ConnectionOwner.createChildActor(conn, ChannelOwner.props())
       Amqp.waitForConnection(system, consumer, producer).await(1, TimeUnit.SECONDS)
@@ -55,7 +55,7 @@ class PendingAcksSpec extends ChannelSpec with WordSpecLike {
 
       // create a consumer that does ack messages
       var counter1 = 0
-      val goodListener = actor {
+      val goodListener = system.actorOf(Props {
         new Act with ActorLogging {
           become {
             case Delivery(consumerTag, envelope, properties, body) => {
@@ -66,7 +66,7 @@ class PendingAcksSpec extends ChannelSpec with WordSpecLike {
             }
           }
         }
-      }
+      })
       val consumer1 = ConnectionOwner.createChildActor(conn, Consumer.props(goodListener, autoack = false, channelParams = None), name = Some("goodConsumer"))
       Amqp.waitForConnection(system, consumer1).await(1, TimeUnit.SECONDS)
 

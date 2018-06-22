@@ -2,7 +2,7 @@ package com.github.sstone.amqp
 
 import java.util.UUID._
 
-import collection.JavaConversions._
+import collection.JavaConverters._
 import com.rabbitmq.client.AMQP.BasicProperties
 import com.rabbitmq.client._
 import akka.actor._
@@ -94,11 +94,11 @@ object ChannelOwner {
       }
       case request@QueueBind(queue, exchange, routingKey, args) => {
         log.debug("binding queue {} to key {} on exchange {}", queue, routingKey, exchange)
-        sender ! withChannel(channel, request)(c => c.queueBind(queue, exchange, routingKey, args))
+        sender ! withChannel(channel, request)(c => c.queueBind(queue, exchange, routingKey, args.asJava))
       }
       case request@QueueUnbind(queue, exchange, routingKey, args) => {
         log.debug("unbinding queue {} to key {} on exchange {}", queue, routingKey, exchange)
-        sender ! withChannel(channel, request)(c => c.queueUnbind(queue, exchange, routingKey, args))
+        sender ! withChannel(channel, request)(c => c.queueUnbind(queue, exchange, routingKey, args.asJava))
       }
       case request@Get(queue, autoAck) => {
         log.debug("getting from queue {} autoAck {}", queue, autoAck)

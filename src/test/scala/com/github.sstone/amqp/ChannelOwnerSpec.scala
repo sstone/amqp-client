@@ -97,7 +97,7 @@ class ChannelOwnerSpec extends ChannelSpec  {
 
     channelOwner ! DeclareQueue(QueueParameters("NO_SUCH_QUEUE", passive = true))
     expectMsgClass(classOf[Amqp.Error])
-    deadletterProbe.expectNoMsg(1 second)
+    deadletterProbe.expectNoMessage(1 second)
   }
 
   "return requests when not connected" in {

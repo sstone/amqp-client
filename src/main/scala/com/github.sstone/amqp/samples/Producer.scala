@@ -25,5 +25,5 @@ object Producer extends App {
 
   // give it some time before shutting everything down
   Thread.sleep(500)
-  system.shutdown()
+  system.terminate()
 }
