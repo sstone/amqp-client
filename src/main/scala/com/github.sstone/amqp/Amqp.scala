@@ -90,8 +90,6 @@ object Amqp {
 
   case class AddShutdownListener(listener: ActorRef) extends Request
 
-  case class AddFlowListener(listener: ActorRef) extends Request
-
   case class Close(code: Int = AMQP.REPLY_SUCCESS, message: String = "OK", timeout: Int = -1) extends Request
 
   case class DeclareQueue(queue: QueueParameters) extends Request
