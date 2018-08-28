@@ -25,7 +25,10 @@ object ConnectionOwner {
   case object CreateChannel
 
   def props(connFactory: ConnectionFactory, reconnectionDelay: FiniteDuration = 10000 millis,
-            executor: Option[ExecutorService] = None, addresses: Option[Array[RMQAddress]] = None): Props = Props(new ConnectionOwner(connFactory, reconnectionDelay, executor, addresses))
+            executor: Option[ExecutorService] = None, addresses: Option[Array[RMQAddress]] = None): Props = {
+    connFactory.setAutomaticRecoveryEnabled(false) //Automatic recovery causing leaking connection in this library
+    Props(new ConnectionOwner(connFactory, reconnectionDelay, executor, addresses))
+  }
 
   def createChildActor(conn: ActorRef, channelOwner: Props, name: Option[String] = None, timeout: Timeout = 5000.millis): ActorRef = {
     val future = conn.ask(Create(channelOwner, name))(timeout).mapTo[ActorRef]
@@ -85,7 +88,7 @@ class ConnectionOwner(connFactory: ConnectionFactory,
 
   val reconnectTimer = context.system.scheduler.schedule(10 milliseconds, reconnectionDelay, self, 'connect)
 
-  override def postStop = connection.map(c => Try(c.close()))
+  override def postStop = connection.map(c => Try(c.close()).recover{ case e => log.error(e, "Connection closing failed")})
 
   override def unhandled(message: Any): Unit = message match {
     case Terminated(actor) if statusListeners.contains(actor) => {
@@ -190,6 +193,7 @@ class ConnectionOwner(connFactory: ConnectionFactory,
     }
     case Shutdown(cause) => {
       log.error(cause, "connection lost")
+	  connection.foreach(c => Try{c.close()}.recover{ case e => log.error(e, "Connection closing failed")})
       connection = None
       context.children.foreach(_ ! Shutdown(cause))
       self ! 'connect
