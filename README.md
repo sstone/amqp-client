@@ -58,14 +58,18 @@ maven/sbt projects.
 
 The latest snapshot (development) version is 1.6-SNAPSHOT, the latest released version is 1.5
 
-* amqp-client 1.0 is compatible with Scala 2.9.2 and Akka 2.0.3
-* amqp-client 1.1 is compatible with Scala 2.9.2 and Akka 2.0.5
-* amqp-client 1.1 is compatible with Scala 2.10.0 and Akka 2.1.0
-* amqp-client 1.2 is compatible with Scala 2.10 and Akka 2.1
-* amqp-client 1.3 is compatible with Scala 2.10 and Akka 2.2
-* amqp-client 1.4 is compatible with Scala 2.10, Scala 2.11 and Akka 2.3.2
-* amqp-client 1.5 is compatible with Scala 2.10, Scala 2.11 and Akka 2.3.11
-* amqp-client 1.6-SNAPSHOT is compatible with Scala 2.10, Scala 2.11 and Akka 2.4.3
+## Compatibily table
+
+|  amqp-client |    Scala   |  Akka  |
+| -------------| ---------- | ------ |
+| 1.0          | 2.9.2      | 2.0.3  |
+| 1.1          | 2.9.2      | 2.0.5  |
+| 1.1          | 2.10.0     | 2.1.0  |
+| 1.2          | 2.10       | 2.1    |
+| 1.3          | 2.10       | 2.2    |
+| 1.4          | 2.10, 2.11 | 2.3.2  |
+| 1.5          | 2.10, 2.11 | 2.3.11 |
+| 1.6-SNAPSHOT | 2.10, 2.11 | 2.4.3  |
  
 
 ## Library design
