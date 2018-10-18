@@ -1,10 +1,11 @@
 package com.github.sstone.amqp
 
 import Amqp._
-import akka.actor.{UnboundedStash, UnrestrictedStash, Props, ActorRef}
-import com.rabbitmq.client.{Envelope, Channel, DefaultConsumer}
+import akka.actor.{ActorRef, Props, UnboundedStash}
+import com.rabbitmq.client.{Channel, DefaultConsumer, Envelope}
 import com.rabbitmq.client.AMQP.BasicProperties
 import akka.event.LoggingReceive
+import com.github.sstone.amqp.Consumer.CheckBindings
 
 import scala.collection.JavaConverters._
 
@@ -17,6 +18,9 @@ object Consumer {
     props(Some(listener), init = List(AddBinding(Binding(exchange, queue, routingKey))), channelParams = channelParams, autoack = autoack)
 
   def props(listener: ActorRef, channelParams: Option[ChannelParameters], autoack: Boolean): Props = props(Some(listener), channelParams = channelParams, autoack = autoack)
+
+  case object CheckBindings
+
 }
 
 /**
@@ -42,6 +46,14 @@ class Consumer(listener: Option[ActorRef],
   import ChannelOwner._
 
   var consumer: Option[DefaultConsumer] = None
+
+  var bindings: Set[Amqp.Binding] = Set.empty[Amqp.Binding]
+
+  override def preStart(): Unit = {
+    import scala.concurrent.duration._
+    context.system.scheduler.schedule(5.seconds, 5.seconds, self, Consumer.CheckBindings)(context.dispatcher)
+    super.preStart()
+  }
 
   override def onChannel(channel: Channel, forwarder: ActorRef): Unit = {
     super.onChannel(channel, forwarder)
@@ -83,9 +95,17 @@ class Consumer(listener: Option[ActorRef],
         c.queueBind(queueName, binding.exchange.name, binding.routingKey)
         val actualConsumerTag = c.basicConsume(queueName, autoack, consumerTag, noLocal, exclusive, arguments.asJava, consumer.get)
         log.debug(s"using consumer $actualConsumerTag")
+        bindings = bindings + binding
         actualConsumerTag
       })
     }
+
+    case CheckBindings =>
+      log.debug(s"Checking if bindings still exists for ${bindings}")
+      bindings
+          .map { binding =>
+            channel.queueBindNoWait(binding.queue.name,binding.exchange.name, binding.routingKey, null)
+          }
 
     case request@CancelConsumer(consumerTag) => {
       log.debug("processing %s".format(request))

@@ -7,10 +7,12 @@ import com.rabbitmq.client.AMQP.BasicProperties
 import com.rabbitmq.client._
 import akka.actor._
 import com.github.sstone.amqp.Amqp._
+
 import scala.util.Try
 import scala.util.Failure
 import scala.util.Success
 import akka.event.LoggingReceive
+
 import scala.collection.mutable
 
 object ChannelOwner {
@@ -22,6 +24,8 @@ object ChannelOwner {
   case object Connected extends State
 
   case class NotConnectedError(request: Request)
+
+  case object ForwarderStopped
 
   def props(init: Seq[Request] = Seq.empty[Request], channelParams: Option[ChannelParameters] = None): Props = Props(new ChannelOwner(init, channelParams))
 
@@ -167,7 +171,9 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
   var requestLog: Vector[Request] = init.toVector
   val statusListeners = mutable.HashSet.empty[ActorRef]
 
-  override def preStart() = context.parent ! ConnectionOwner.CreateChannel
+  override def preStart() = {
+    context.parent ! ConnectionOwner.CreateChannel
+  }
 
   override def unhandled(message: Any): Unit = message match {
     case Terminated(actor) if statusListeners.contains(actor) => {
@@ -222,7 +228,13 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
     }
     case Shutdown(cause) if !cause.isInitiatedByApplication => {
       log.error(cause, "shutdown")
+      //context.stop is an async operator so we are waiting for termination before recreating channel
+      context.watchWith(forwarder, ForwarderStopped)
       context.stop(forwarder)
+    }
+
+    case ForwarderStopped => {
+      log.warning("Forwarder terminated - recreating channel")
       context.parent ! ConnectionOwner.CreateChannel
       statusListeners.map(a => a ! Disconnected)
       context.become(disconnected)

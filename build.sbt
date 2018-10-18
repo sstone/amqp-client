@@ -2,7 +2,7 @@ name := "amqp-client"
 
 organization := "com.kinja"
  
-version := "2.0.1" + (if (RELEASE_BUILD) "" else "-SNAPSHOT")
+version := "2.0.2" + (if (RELEASE_BUILD) "" else "-SNAPSHOT")
  
 crossScalaVersions := Seq("2.12.6", "2.11.8")
 

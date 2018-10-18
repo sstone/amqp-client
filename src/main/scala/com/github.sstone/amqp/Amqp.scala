@@ -4,7 +4,6 @@ import collection.JavaConverters._
 import com.rabbitmq.client.AMQP.BasicProperties
 import com.rabbitmq.client.{AMQP, ShutdownSignalException, Channel, Envelope}
 import akka.actor.{Actor, Props, ActorRef, ActorRefFactory}
-import akka.actor.FSM.{SubscribeTransitionCallBack, CurrentState, Transition}
 import java.util.concurrent.CountDownLatch
 
 object Amqp {
