@@ -87,7 +87,10 @@ class ConnectionOwner(connFactory: ConnectionFactory,
 
   val reconnectTimer = context.system.scheduler.schedule(10 milliseconds, reconnectionDelay, self, 'connect)
 
-  override def postStop = connection.map(c => Try(c.close()).recover{ case e => log.error(e, "Connection closing failed")})
+  override def postStop = connection.map{ c =>
+    Try(if (c.isOpen) c.close())
+      .recover{ case e => log.error(e, "Connection closing failed")}
+  }
 
   override def unhandled(message: Any): Unit = message match {
     case Terminated(actor) if statusListeners.contains(actor) => {
@@ -171,20 +174,25 @@ class ConnectionOwner(connFactory: ConnectionFactory,
     case Abort(code, message) => {
       conn.abort(code, message)
       context.stop(self)
-    }    
+    }
     case Close(code, message, timeout) => {
       conn.close(code, message, timeout)
       context.stop(self)
-    }    
+    }
+    case CreateChannel if !conn.isOpen =>
+      statusListeners.foreach(_ ! Disconnected)
+      context.become(disconnected)
+
     case CreateChannel => Try(conn.createChannel()) match {
       case Success(channel) => sender ! channel
       case Failure(cause) => {
-		val namesOfListeners = statusListeners.map(_.path).mkString("[", ",", "]")
+        val namesOfListeners = statusListeners.map(_.path).mkString("[", ",", "]")
         log.error(cause, s"cannot create channel. Sending `Disconnected` to $namesOfListeners")
         statusListeners.foreach(_ ! Disconnected)
         context.become(disconnected)
       }
     }
+
     case AddStatusListener(listener) => {
       addStatusListener(listener)
       listener ! Connected
@@ -194,7 +202,10 @@ class ConnectionOwner(connFactory: ConnectionFactory,
     }
     case Shutdown(cause) => {
       log.error(cause, "connection lost")
-	  connection.foreach(c => Try{c.close()}.recover{ case e => log.error(e, "Connection closing failed")})
+      connection.foreach{ c =>
+        Try(if (c.isOpen) c.close())
+          .recover{ case e => log.error(e, "Connection closing failed")}
+      }
       connection = None
       context.children.foreach(_ ! Shutdown(cause))
       self ! 'connect
@@ -206,6 +217,7 @@ class ConnectionOwner(connFactory: ConnectionFactory,
     if (!statusListeners.contains(listener)) {
       context.watch(listener)
       statusListeners.add(listener)
+      context.children.foreach(_ ! AddStatusListener(listener))
     }
   }
 }

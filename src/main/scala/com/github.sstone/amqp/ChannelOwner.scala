@@ -32,10 +32,8 @@ object ChannelOwner {
   private[amqp] class Forwarder(channel: Channel, private var channelId: String) extends Actor with ActorLogging {
 
     override def postStop(): Unit = {
-      Try(channel.close()).recover{
-        case _:AlreadyClosedException => log.info(s"Channel closing failed: Connection was already closed.")
-        case e => log.error(e, "Channel closing failed:")
-      }
+      Try(if (channel.isOpen) channel.close())
+        .recover{ case e => log.error(e, "Channel closing failed:")}
     }
 
     override def unhandled(message: Any): Unit = log.warning(s"unhandled message $message")
@@ -210,6 +208,10 @@ class ChannelOwner(init: Seq[Request] = Seq.empty[Request], channelParams: Optio
 
     case request: Request => {
       sender ! NotConnectedError(request)
+    }
+
+    case Shutdown(cause) if !cause.isInitiatedByApplication => {
+      log.warning(s"Shutdown request in disconnected state: $cause")
     }
   }
 
