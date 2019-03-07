@@ -6,4 +6,4 @@ resolvers := Seq(
 credentials += Credentials(Path.userHome / ".ivy2" / ".kinja-artifactory.credentials")
 
 // Kinja build plugin
-addSbtPlugin("com.kinja.sbtplugins" %% "kinja-build-plugin" % "3.2.1")
+addSbtPlugin("com.kinja.sbtplugins" %% "kinja-build-plugin" % "3.2.4")
