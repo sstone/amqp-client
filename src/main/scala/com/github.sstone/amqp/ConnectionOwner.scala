@@ -101,17 +101,20 @@ class ConnectionOwner(connFactory: ConnectionFactory,
   }
 
   /**
-   * ask this connection owner to create a "channel aware" child
+   * ask this connection owner to create a "channel aware" child and
+   * attach the status listeners to it.
    * @param props actor creation properties
    * @param name optional actor name
    * @return a new actor
    */
-  private def createChild(props: Props, name: Option[String]) = {
+  private def createChild(props: Props, name: Option[String]): ActorRef = {
     // why isn't there an actorOf(props: Props, name: Option[String] = None) ?
-    name match {
+    val child = name match {
       case None => context.actorOf(props)
       case Some(actorName) => context.actorOf(props, actorName)
     }
+    statusListeners.foreach(listener => child ! AddStatusListener(listener))
+    child
   }
 
   def createConnection: Connection = {
