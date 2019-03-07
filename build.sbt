@@ -18,7 +18,7 @@ scalacOptions ++= Seq(
 
 libraryDependencies ++= Seq(
 	"com.typesafe.akka"    %% "akka-actor"          % akkaVersion % Provided,
-	"com.rabbitmq"         % "amqp-client"          % "5.3.0",
+	"com.rabbitmq"         % "amqp-client"          % "5.6.0",
 	"com.typesafe.akka"    %% "akka-testkit"        % akkaVersion  % Test,
 	"org.scalatest"        %% "scalatest"           % "3.0.5" % Test,
 	"junit"                % "junit"                % "4.12" % Test,
